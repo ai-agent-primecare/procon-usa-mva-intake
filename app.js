@@ -13,9 +13,6 @@ const state = {
   index: 0
 };
 
-const YN = ["Sim","Não"];
-const YNM = ["Sim","Não","Não lembra ou não sabe"];
-
 /* Where the completed intake gets emailed. No third-party relay is used —
    the PDF is generated and downloaded locally, then a pre-filled email
    draft opens in the user's own mail client (mailto:). Nothing leaves the
@@ -67,209 +64,25 @@ const occupantsFlow = [
 ];
 
 /* ---------------------------------------------------------
-   CASE INFO (rest of page 1)
+   ACCIDENT INFO (asked right after occupants/client names)
 --------------------------------------------------------- */
-const caseInfoFlow = [
-  q("referral","Case Info","Referral","text",{}),
-  q("clinic","Case Info","Clinic","text",{}),
-  q("caseType","Case Info","Case type","single",{options:["Normal","Difficult"]}),
-  q("clinicRequest","Case Info","Clinic Request","single",{options:["Yes","No","N/A"]}),
-  q("propertyDamage","Case Info","Property Damage (Service Request)","single",{options:YN}),
-  q("importantNotes","Case Info","Important Notes","textarea",{}),
-  q("intakeDate","Case Info","Intake Date","date",{})
-];
-
-/* ---------------------------------------------------------
-   FATOS DO ACIDENTE (Accident Facts) — page 2
---------------------------------------------------------- */
-const factsFlow = [
-  q("accidentDate","Accident Facts","Dia do Acidente","date",{}),
-  q("accidentTime","Accident Facts","Hora do acidente","text",{placeholder:"ex: 14:30"}),
-  q("accidentCity","Accident Facts","Cidade do acidente","text",{}),
-  q("accidentLocation","Accident Facts","Local do acidente","text",{}),
-  q("policeCame","Accident Facts","A polícia veio ao local?","single",{options:YN}),
-  q("policeReport","Accident Facts","A polícia fez o relatório (reporte)?","single",{options:YNM}),
-  q("policeTicket","Accident Facts","A polícia deu multa?","single",{options:YNM}),
-  q("ticketType","Accident Facts","Que tipo de multa?","text",{condition:s=>s.answers.policeTicket==="Sim"}),
-  q("occupantsInCar","Accident Facts","Quantas pessoas estavam dentro do carro?","single",{options:["1","2","3","4","5","6"]}),
-  q("carsInvolved","Accident Facts","Quantos carros envolvidos no acidente?","single",{options:["1","2","3","4","5"]}),
-  q("impactsFelt","Accident Facts","Quantos impactos você sentiu?","single",{options:["1","2"]}),
-  q("driverSeatbelt","Accident Facts","O motorista estava usando cinto de segurança?","single",{options:YN}),
-  q("passengersSeatbelt","Accident Facts","Os passageiros estava(m) usando cinto de segurança?","single",{options:YN,
-    condition: s => s.answers.numPeople !== "1"}),
-  q("passengersNoSeatbeltList","Accident Facts","Liste o(s) passageiro(s) que não estava(m) usando cinto","textarea",{
-    condition: s => s.answers.passengersSeatbelt === "Não"
+const accidentInfoFlow = [
+  q("accidentDate","Accident Info","Day of accident (DOL)","date",{}),
+  q("accidentTime","Accident Info","Time of accident","text",{placeholder:"e.g. 2:30 PM"}),
+  q("accidentPlace","Accident Info","Place of accident","text",{}),
+  q("policeCame","Accident Info","Did the police come to the scene?","single",{
+    options:["Yes, state police","Yes, local police","No"]
   }),
-  q("accidentFactsNotes","Accident Facts","Descreva os fatos do acidente","textarea",{}),
-  q("witness","Accident Facts","Teve alguma testemunha?","single",{options:["Não","Sim"]}),
-  q("witnessName","Accident Facts","Nome da testemunha","text",{condition:s=>s.answers.witness==="Sim"}),
-  q("airbag","Accident Facts","O airbag abriu?","single",{options:YNM}),
-  q("carUseReason","Accident Facts","Motivo que estava usando o carro","single",{
-    options:["Indo trabalhar","Voltando do trabalho","Trabalhando","Uso particular","Taxi/Uber/Lyft/Aplicativo","Carro alugado","Outro"]
-  }),
-  q("carUseReasonOther","Accident Facts","Descreva o motivo","text",{condition:s=>s.answers.carUseReason==="Outro"})
+  q("policeReport","Accident Info","Did the police make a report?","single",{
+    options:[
+      "Yes, we have a copy",
+      "Yes, we are waiting a copy from client",
+      "Yes, but only exchange report",
+      "No",
+      "Client doesn't know"
+    ]
+  })
 ];
-
-/* ---------------------------------------------------------
-   CONDIÇÕES NA HORA DO ACIDENTE — page 3
---------------------------------------------------------- */
-const conditionsFlow = [
-  q("lighting","Conditions","A iluminação","single",{options:[
-    "Estava de dia","Madrugada","Final de tarde","Noite – Rua Iluminada",
-    "Noite – Rua sem iluminação","Noite – Não lembra sobre a iluminação","Outra","Não sabe"]}),
-  q("weather","Conditions","Condições do clima","single",{options:[
-    "Limpo","Nublado","Chovendo","Nevando","Chovendo gelo / granizo","Neblina",
-    "Rajadas fortes de vento","Soprando areia ou neve","Outro"]}),
-  q("trafficSignal","Conditions","Tipo de sinal de trânsito","single",{options:[
-    "Sem Sinal","Placa de pare","Semáforo, Farol ou Sinal","Semáforo piscando - Amarelo",
-    "Semáforo piscando - Vermelho","Sinal de cuidado (Yield)","Sinal de zona de escola",
-    "Sinal de alerta (Warning)","Sinal cruzamento de trem","Não sabe"]}),
-  q("signalWorking","Conditions","O sinal de trânsito estava funcionando na hora do acidente?","single",{
-    options:["Sim","Não","Não havia sinal"]}),
-  q("roadCondition","Conditions","Condição da pista","single",{options:[
-    "Seca","Molhada","Neve","Gelo","Areia/lama/poeira/óleo/piso de pedra",
-    "Água (parada ou mexendo)","Lamaçal de neve ou gelo derretido","Outra"]}),
-  q("intersectionType","Conditions","Tipo de interseção","single",{options:[
-    "Não era uma interseção","Interseção de 4 ruas em cruz","Interseção em T","Interseção em Y",
-    "Subindo a rampa","Descendo a rampa","Rotatória","Interseção de 5 ruas ou mais",
-    "Rampa da garagem (Driveway)","Cruzamento da linha do trem","Outro"]}),
-  q("roadType","Conditions","Tipo de rua","single",{options:[
-    "Mão dupla sem faixa","Mão dupla com faixa, sem muro de divisão",
-    "Mão dupla com faixa e muro de divisão","Mão única","Outra"]}),
-  q("schoolBus","Conditions","Acidente envolveu ônibus escolar?","single",{options:YN}),
-  q("constructionArea","Conditions","Acidente foi em área de reparo ou construção da estrada?","single",{options:YN}),
-  q("accidentType","Conditions","Como foi o acidente","single",{options:[
-    "Acidente com apenas um carro","Na traseira","De ângulo (aprox. 90º)",
-    "Lateral na mesma direção","Lateral na direção oposta","De frente","Traseira com traseira","Outra"]})
-];
-
-/* ---------------------------------------------------------
-   INFORMAÇÕES SOBRE O VEÍCULO — page 4
---------------------------------------------------------- */
-const vehicleInfoFlow = [
-  q("priorAccident2","Vehicle Info","O veículo já sofreu acidente antes?","single",{options:["Sim","Não","Outro"]}),
-  q("financed","Vehicle Info","O carro é financiado?","single",{options:["Sim","Não","Outro"]}),
-  q("upgrades","Vehicle Info","Houve algum aprimoramento no veículo? (freio novo, pintura nova, som novo, etc.)","text",{}),
-  q("otherVehicleAtHome","Vehicle Info","Há algum outro veículo na sua casa?","single",{options:YN}),
-  q("otherVehicleOwner","Vehicle Info","Nome do dono","text",{condition:s=>s.answers.otherVehicleAtHome==="Sim"}),
-  q("otherVehicleInsurer","Vehicle Info","Nome da seguradora","text",{condition:s=>s.answers.otherVehicleAtHome==="Sim"}),
-  q("otherVehicleRelationship","Vehicle Info","Relacionamento","text",{condition:s=>s.answers.otherVehicleAtHome==="Sim"}),
-  q("gap","Vehicle Info","Tem GAP?","single",{options:["Sim","Não","Não sei ou não lembro","Outro"]}),
-  q("towed","Vehicle Info","O carro foi rebocado?","single",{options:YN}),
-  q("carLocation","Vehicle Info","Onde está o carro?","text",{condition:s=>s.answers.towed==="Sim"}),
-  q("bodyshopName","Vehicle Info","Bodyshop / towing company — Nome","text",{condition:s=>s.answers.towed==="Sim"}),
-  q("bodyshopPhone","Vehicle Info","Telefone","text",{condition:s=>s.answers.towed==="Sim"}),
-  q("bodyshopContact","Vehicle Info","Pessoa de contato","text",{condition:s=>s.answers.towed==="Sim"}),
-  q("bodyshopAddress","Vehicle Info","Endereço","text",{condition:s=>s.answers.towed==="Sim"}),
-  q("carOwner","Vehicle Info","O dono do carro é","single",{options:[
-    "Motorista","Passageiro","Esposo(a)","Pai ou Mãe","Filho ou filha","Irmão ou irmã",
-    "Amigo(a)","Empresa","Colega de quarto","Outro"]}),
-  q("ownerSameHouse","Vehicle Info","O dono do carro mora na mesma casa que o motorista?","single",{options:["Sim","Não","Outro"]}),
-  q("overnightCity","Vehicle Info","Em que cidade o veículo fica estacionado à noite?","text",{}),
-  q("insuranceType","Vehicle Info","Que tipo de seguro tem o carro?","single",{options:["Particular","Comercial","Outro"]}),
-  q("coverageType","Vehicle Info","Que cobertura tem o carro?","single",{options:["Básico / simples","Total com aluguel","Total sem aluguel"]}),
-  // Particular
-  q("driverIncludedInsurance","Vehicle Info","O motorista está incluído no seguro?","single",{
-    options:["Sim","Não","Outro"], condition:s=>s.answers.insuranceType==="Particular"}),
-  q("hoursPerWeek","Vehicle Info","Se não, quantas horas o motorista usa o carro por semana?","text",{
-    condition:s=>s.answers.insuranceType==="Particular" && s.answers.driverIncludedInsurance==="Não"}),
-  // Comercial
-  q("driverEmployee","Vehicle Info","O motorista é funcionário da empresa?","single",{
-    options:["Sim","Não","Outro"], condition:s=>s.answers.insuranceType==="Comercial"}),
-  q("companyTime","Vehicle Info","Quanto tempo a empresa existe?","text",{condition:s=>s.answers.insuranceType==="Comercial"}),
-  q("insurerContact","Vehicle Info","Já houve algum contato com a seguradora?","single",{
-    options:YN, condition:s=>s.answers.insuranceType==="Comercial"}),
-  q("insurerContactWho","Vehicle Info","Quem?","text",{
-    condition:s=>s.answers.insuranceType==="Comercial" && s.answers.insurerContact==="Sim"}),
-  q("insurerWhich","Vehicle Info","Qual seguradora?","multi",{
-    options:["PIP","BI"], condition:s=>s.answers.insuranceType==="Comercial"}),
-  q("pipStatement","Vehicle Info","O que foi dito para PIP?","textarea",{
-    condition:s=>s.answers.insuranceType==="Comercial" && (s.answers.insurerWhich||[]).includes("PIP")}),
-  q("biStatement","Vehicle Info","O que foi dito para BI?","textarea",{
-    condition:s=>s.answers.insuranceType==="Comercial" && (s.answers.insurerWhich||[]).includes("BI")})
-];
-
-/* ---------------------------------------------------------
-   MV1-MV4 — page 5 (dynamic count based on carsInvolved, capped at 4)
---------------------------------------------------------- */
-function mvFields(n){
-  const fields = ["plate","state","owner","address","city","city_state","zip","make","model","year","color","insurance","phone","extension","claimNumber","adjuster","damage"];
-  const labels = {
-    plate:"Placa / Registration", state:"State", owner:"Owner", address:"Address",
-    city:"City", city_state:"State", zip:"Zip", make:"Make", model:"Model", year:"Year",
-    color:"Color", insurance:"Insurance", phone:"Phone", extension:"Extension",
-    claimNumber:"Claim n°", adjuster:"Adjuster", damage:"Damage"
-  };
-  const out = [];
-  fields.forEach(f=>{
-    out.push(q(`mv${n}_${f}`, `Vehicle MV${n}`, `MV${n} — ${labels[f]}`, f==="damage" ? "textarea":"text", {
-      condition: s => (parseInt(s.answers.carsInvolved,10)||1) >= n
-    }));
-  });
-  return out;
-}
-const mvFlow = [1,2,3,4].flatMap(mvFields);
-
-/* ---------------------------------------------------------
-   INFORMAÇÕES DO CLIENTE — page 6 (repeats per client)
---------------------------------------------------------- */
-const DOCS = [
-  "Carteira de Motorista (Americana ou Brasileira)","Passaporte","Relatório da Polícia",
-  "Contas Médicas (Hospital, Ambulância, etc.)","Hospital Discharge","Carteira do Plano de Saúde",
-  "Recibo do Reboque","Registro do Carro","Contrato do Seguro do Carro (Apólice)"
-];
-
-function clientFields(idx){
-  const p = `client${idx}_`;
-  const sectionName = `Client Info — Person ${idx+1}`;
-  const cname = s => (s.clients[idx] && s.clients[idx].name) ? s.clients[idx].name : `Client ${idx+1}`;
-  const cond = s => !!s.clients[idx];
-  const list = [
-    q(p+"role",sectionName,"Motorista, Passageiro ou Pedestre?","single",{options:["Motorista","Passageiro","Pedestre"]}),
-    q(p+"lostWork",sectionName,"Perdeu dias de trabalho?","single",{options:YN}),
-    q(p+"language",sectionName,"Cliente fala","single",{options:["Português","Inglês","Espanhol","Creolo","Outra"]}),
-    q(p+"languageOther",sectionName,"Qual outra língua?","text",{condition:s=>cond(s) && s.answers[p+"language"]==="Outra"}),
-    q(p+"interpreter",sectionName,"Precisa de intérprete?","single",{options:YN}),
-    q(p+"email",sectionName,"Email","text",{}),
-    q(p+"licenseNumber",sectionName,"Nº Carteira de Motorista","text",{}),
-    q(p+"licenseState",sectionName,"Estado (da carteira)","text",{}),
-    q(p+"fullName",sectionName,"Nome COMPLETO","text",{defaultValueFn: cname}),
-    q(p+"address",sectionName,"Endereço","text",{}),
-    q(p+"city",sectionName,"Cidade","text",{}),
-    q(p+"state",sectionName,"Estado","text",{}),
-    q(p+"zip",sectionName,"Zip","text",{}),
-    q(p+"cell",sectionName,"Celular","text",{}),
-    q(p+"dob",sectionName,"Data de Nascimento (DOB)","date",{}),
-    q(p+"ssn",sectionName,"SSN","text",{}),
-    q(p+"emergencyName",sectionName,"Contato de Emergência — Nome","text",{}),
-    q(p+"emergencyCell",sectionName,"Contato de Emergência — Celular","text",{}),
-    q(p+"emergencyRel",sectionName,"Contato de Emergência — Relacionamento","text",{}),
-    q(p+"priorAccident",sectionName,"Algum acidente anteriormente?","single",{
-      options:["Não","Sim, há mais de 5 anos","Sim, há menos de 5 anos"]}),
-    q(p+"healthPlan",sectionName,"Plano de Saúde","single",{
-      options:["Privado","Masshealth","Outro","Não tem Plano de saúde"]}),
-    q(p+"injuries",sectionName,"Lesão / Machucados / Danos Físicos / Dor","multi",{
-      options:["Costas","Pescoço","Braços","Pernas","Corte","Pontos","Cicatriz","Cirurgia","Fratura de Osso"]}),
-    q(p+"injuryDesc",sectionName,"Descreva as lesões acima","textarea",{}),
-    q(p+"ambulance",sectionName,"Ambulância (nome/empresa)","text",{}),
-    q(p+"hospital",sectionName,"Nome do Hospital","text",{}),
-    q(p+"daysHospitalized",sectionName,"Quantos dias ficou internado?","text",{}),
-    q(p+"clinicName",sectionName,"Clínica","text",{}),
-    q(p+"carPosition",sectionName,"Posição do cliente no carro","single",{options:["1","2","3","4","5"]}),
-  ];
-  DOCS.forEach((doc,i)=>{
-    list.push(q(p+"doc"+i+"_needed",sectionName,`${doc} — Necessário?`,"single",{options:YN}));
-    list.push(q(p+"doc"+i+"_received",sectionName,`${doc} — Recebido?`,"single",{options:YN}));
-  });
-  list.push(q(p+"notes",sectionName,"Notas adicionais sobre o cliente","textarea",{}));
-  // apply shared condition + title prefix to all
-  return list.map(f=>{
-    const orig = f.condition;
-    f.condition = s => cond(s) && (orig ? orig(s) : true);
-    f.titlePrefix = () => cname(state);
-    return f;
-  });
-}
 
 /* ---------------------------------------------------------
    BUILD FULL FLOW (recomputed live based on state)
@@ -294,19 +107,9 @@ function computeClients(s){
 
 function buildFlow(){
   state.clients = computeClients(state);
-  const maxClients = 8; // cap; only rendered ones with a matching client show
-  let clientQuestions = [];
-  for(let i=0;i<maxClients;i++){
-    clientQuestions = clientQuestions.concat(clientFields(i));
-  }
   return [
     ...occupantsFlow,
-    ...caseInfoFlow,
-    ...factsFlow,
-    ...conditionsFlow,
-    ...vehicleInfoFlow,
-    ...mvFlow,
-    ...clientQuestions
+    ...accidentInfoFlow
   ];
 }
 
