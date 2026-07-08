@@ -16,6 +16,12 @@ const state = {
 const YN = ["Sim","Não"];
 const YNM = ["Sim","Não","Não lembra ou não sabe"];
 
+/* Where the completed intake gets emailed. No third-party relay is used —
+   the PDF is generated and downloaded locally, then a pre-filled email
+   draft opens in the user's own mail client (mailto:). Nothing leaves the
+   browser except through the user's own email account. */
+const INTAKE_EMAIL = "ai-agent@rockwood-enterprise.com";
+
 /* ---------------------------------------------------------
    HELPERS to build question objects
 --------------------------------------------------------- */
@@ -509,7 +515,7 @@ function renderReview(){
 
   const sub = document.createElement("p");
   sub.className = "question-sub";
-  sub.textContent = "Review the intake below, then download a PDF summary for the file.";
+  sub.textContent = `Review the intake below, then download a PDF summary for the file — or click Email to download the PDF and open a pre-filled draft to ${INTAKE_EMAIL} (attach the PDF and hit Send).`;
   card.appendChild(sub);
 
   const reviewWrap = document.createElement("div");
@@ -536,11 +542,18 @@ function renderReview(){
   const actions = document.createElement("div");
   actions.className = "export-actions";
   actions.innerHTML = `
-    <button class="btn btn-primary" id="pdfBtn">⬇ Download PDF</button>
+    <button class="btn btn-primary" id="emailBtn">✉ Email to ${INTAKE_EMAIL}</button>
+    <button class="btn btn-secondary" id="pdfBtn">⬇ Download PDF</button>
     <button class="btn btn-secondary" id="editBtn">← Edit Answers</button>
     <button class="btn btn-ghost" id="restartBtn">Start New Intake</button>
   `;
   card.appendChild(actions);
+
+  const statusLine = document.createElement("p");
+  statusLine.id = "sendStatus";
+  statusLine.className = "footer-note";
+  card.appendChild(statusLine);
+
   app.appendChild(card);
 
   document.getElementById("editBtn").onclick = ()=>{ state.index = Math.max(0, visibleFlow().length-1); render(); };
@@ -550,11 +563,12 @@ function renderReview(){
     }
   };
   document.getElementById("pdfBtn").onclick = ()=> exportPDF(order, groups);
+  document.getElementById("emailBtn").onclick = ()=> emailIntake(order, groups);
 }
 
-function exportPDF(order, groups){
-  const printDiv = document.createElement("div");
-  printDiv.id = "printArea";
+/* Builds the shared printable summary markup used by both the PDF export
+   and the emailed PDF attachment. */
+function buildSummaryHtml(order, groups){
   let html = `<div style="font-family:Georgia,serif;padding:10px;">
     <h1 style="color:#111;border-bottom:3px solid #d4af37;padding-bottom:8px;">Procon USA Law — MVA Intake Summary</h1>
     <p style="color:#666;font-size:12px;">Generated ${new Date().toLocaleString()}</p>`;
@@ -570,21 +584,86 @@ function exportPDF(order, groups){
     });
   });
   html += `</div>`;
-  printDiv.innerHTML = html;
+  return html;
+}
+
+/* Plain-text version for the email body (in case the attachment doesn't
+   render, or as a fallback for text-only clients). */
+function buildSummaryText(order, groups){
+  let lines = [`Procon USA Law — MVA Intake Summary`, `Generated ${new Date().toLocaleString()}`, ""];
+  order.forEach(sec=>{
+    const rows = groups[sec].filter(f=>state.answers[f.id]!==undefined);
+    if(!rows.length) return;
+    lines.push(`-- ${sec} --`);
+    rows.forEach(f=>{
+      lines.push(`${currentLabel(f)}: ${fmtVal(state.answers[f.id])}`);
+    });
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+const PDF_OPT = {
+  margin: 10,
+  filename: 'procon-usa-mva-intake.pdf',
+  image: { type: 'jpeg', quality: 0.98 },
+  html2canvas: { scale: 2 },
+  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+};
+
+function exportPDF(order, groups){
+  const printDiv = document.createElement("div");
+  printDiv.id = "printArea";
+  printDiv.innerHTML = buildSummaryHtml(order, groups);
   document.body.appendChild(printDiv);
 
-  const opt = {
-    margin: 10,
-    filename: 'procon-usa-mva-intake.pdf',
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-  html2pdf().set(opt).from(printDiv).save().then(()=>{
+  html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
     document.body.removeChild(printDiv);
   }).catch(()=>{
     window.print();
     document.body.removeChild(printDiv);
+  });
+}
+
+function setStatus(msg, kind){
+  const el = document.getElementById("sendStatus");
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = kind === "error" ? "#b33" : kind === "ok" ? "#2a7a2a" : "";
+}
+
+function emailIntake(order, groups){
+  const btn = document.getElementById("emailBtn");
+  btn.disabled = true;
+  btn.textContent = "Preparing…";
+  setStatus("Downloading PDF…");
+
+  const printDiv = document.createElement("div");
+  printDiv.id = "printArea";
+  printDiv.innerHTML = buildSummaryHtml(order, groups);
+  document.body.appendChild(printDiv);
+
+  html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
+    document.body.removeChild(printDiv);
+
+    const clientNames = state.clients.map(c=>c.name).filter(Boolean).join(", ") || "Unnamed";
+    const subject = `New MVA Intake — ${clientNames}`;
+    const body =
+      `MVA intake completed for: ${clientNames}\n\n` +
+      `A PDF summary (procon-usa-mva-intake.pdf) was just downloaded to this computer — ` +
+      `please attach it to this email before sending.\n\n` +
+      `Sent from the Procon USA Law MVA Intake tool.`;
+    const mailtoUrl = `mailto:${INTAKE_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailtoUrl;
+
+    btn.disabled = false;
+    btn.textContent = "✉ Email to " + INTAKE_EMAIL;
+    setStatus("PDF downloaded and email draft opened — attach the PDF and hit Send.", "ok");
+  }).catch(err=>{
+    btn.disabled = false;
+    btn.textContent = "✉ Email to " + INTAKE_EMAIL;
+    setStatus("Couldn't generate the PDF (" + err.message + "). Try Download PDF instead.", "error");
+    if(document.getElementById("printArea")) document.body.removeChild(document.getElementById("printArea"));
   });
 }
 
