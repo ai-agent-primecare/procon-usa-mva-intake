@@ -81,6 +81,23 @@ const accidentInfoFlow = [
       "No",
       "Client doesn't know"
     ]
+  }),
+  q("citation","Accident Info","Police gave a citation","single",{
+    options:["Yes","No"]
+  }),
+  q("citationType","Accident Info","What type of fine was it?","text",{
+    condition: s => s.answers.citation === "Yes"
+  }),
+  q("carsInvolved","Accident Info","How many cars were involved in the accident?","single",{
+    options:["1","2","3","4","5","6","7","8"]
+  }),
+  q("carPosition","Accident Info","What position was the car in line?","single",{
+    options:["1","2","3","4","5","6","7","8"],
+    condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
+  }),
+  q("impactsFelt","Accident Info","How many impacts did they feel?","single",{
+    options:["1","2","3","4","5","6"],
+    condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
   })
 ];
 
