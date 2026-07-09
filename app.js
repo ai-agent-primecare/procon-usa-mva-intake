@@ -462,17 +462,30 @@ const PDF_OPT = {
   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
 };
 
-function exportPDF(order, groups){
+/* Builds the offscreen wrapper + printArea pair used for html2canvas export.
+   IMPORTANT: the element passed to html2canvas (printDiv) must stay in
+   normal static-flow positioning — html2canvas renders a zero-height
+   canvas for elements that are themselves position:absolute/fixed. The
+   WRAPPER (not printDiv) carries the offscreen positioning instead. */
+function buildPrintNodes(order, groups){
+  const wrapper = document.createElement("div");
+  wrapper.className = "print-wrapper";
   const printDiv = document.createElement("div");
   printDiv.id = "printArea";
   printDiv.innerHTML = buildSummaryHtml(order, groups);
-  document.body.appendChild(printDiv);
+  wrapper.appendChild(printDiv);
+  document.body.appendChild(wrapper);
+  return {wrapper, printDiv};
+}
+
+function exportPDF(order, groups){
+  const {wrapper, printDiv} = buildPrintNodes(order, groups);
 
   html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
-    document.body.removeChild(printDiv);
+    document.body.removeChild(wrapper);
   }).catch(()=>{
     window.print();
-    document.body.removeChild(printDiv);
+    document.body.removeChild(wrapper);
   });
 }
 
@@ -489,13 +502,10 @@ function emailIntake(order, groups){
   btn.textContent = "Preparing…";
   setStatus("Downloading PDF…");
 
-  const printDiv = document.createElement("div");
-  printDiv.id = "printArea";
-  printDiv.innerHTML = buildSummaryHtml(order, groups);
-  document.body.appendChild(printDiv);
+  const {wrapper, printDiv} = buildPrintNodes(order, groups);
 
   html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
-    document.body.removeChild(printDiv);
+    document.body.removeChild(wrapper);
 
     const clientNames = state.clients.map(c=>c.name).filter(Boolean).join(", ") || "Unnamed";
     const subject = `New MVA Intake — ${clientNames}`;
@@ -514,7 +524,7 @@ function emailIntake(order, groups){
     btn.disabled = false;
     btn.textContent = "✉ Email to " + INTAKE_EMAIL;
     setStatus("Couldn't generate the PDF (" + err.message + "). Try Download PDF instead.", "error");
-    if(document.getElementById("printArea")) document.body.removeChild(document.getElementById("printArea"));
+    if(document.body.contains(wrapper)) document.body.removeChild(wrapper);
   });
 }
 

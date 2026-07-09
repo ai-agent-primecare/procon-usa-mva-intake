@@ -188,13 +188,18 @@ label.field-label{display:block;font-weight:600;font-size:13px;color:#333;margin
 }
 
 /* print / PDF export area.
-   IMPORTANT: this must stay laid-out (not display:none) or html2canvas
-   captures a zero-height canvas and the generated PDF comes out blank.
-   It's kept off-screen instead so it never shows in the normal UI. */
-#printArea{
-  position:absolute;
+   IMPORTANT: html2canvas renders a ZERO-HEIGHT canvas if the captured
+   element itself has position:absolute/fixed (a known html2canvas quirk —
+   confirmed by direct testing). So #printArea must stay in normal static
+   flow. It's kept out of view by putting it inside an off-screen
+   position:fixed WRAPPER instead — the wrapper is offscreen, the captured
+   element inside it is not. */
+.print-wrapper{
+  position:fixed;
   top:0;
   left:-99999px;
+}
+#printArea{
   width:800px;
   background:#fff;
 }
