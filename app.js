@@ -68,10 +68,10 @@ const occupantsFlow = [
 --------------------------------------------------------- */
 const accidentInfoFlow = [
   q("accidentDate","Accident Info","Day of accident (DOL)","date",{}),
-  q("accidentTime","Accident Info","Time of accident","text",{placeholder:"e.g. 2:30 PM"}),
+  q("accidentTime","Accident Info","Time of accident","time12",{placeholder:"e.g. 2:30"}),
   q("accidentPlace","Accident Info","Place of accident","text",{}),
   q("policeCame","Accident Info","Did the police come to the scene?","single",{
-    options:["Yes, state police","Yes, local police","No"]
+    options:["Yes, state police","Yes, local police","No","Doesn't know"]
   }),
   q("policeReport","Accident Info","Did the police make a report?","single",{
     options:[
@@ -83,7 +83,7 @@ const accidentInfoFlow = [
     ]
   }),
   q("citation","Accident Info","Police gave a citation","single",{
-    options:["Yes","No"]
+    options:["Yes","No","Doesn't know"]
   }),
   q("citationType","Accident Info","What type of fine was it?","text",{
     condition: s => s.answers.citation === "Yes"
@@ -234,6 +234,37 @@ function render(){
     input.onkeydown = (e)=>{ if(e.key==="Enter"){ goNext(); } };
     body.appendChild(input);
     setTimeout(()=>input.focus(), 30);
+    body.appendChild(navButtons(f, true));
+  }
+  else if(f.type === "time12"){
+    const match = /^(.*?)\s*(AM|PM)?$/i.exec((currentVal||"").trim());
+    let hourPart = (match && match[1]) ? match[1].trim() : (currentVal||"");
+    let period = (match && match[2]) ? match[2].toUpperCase() : "";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    if(f.placeholder) input.placeholder = f.placeholder;
+    input.value = hourPart;
+    const combine = ()=>{
+      const h = input.value.trim();
+      state.answers[f.id] = period ? (h ? `${h} ${period}` : period) : h;
+    };
+    input.oninput = ()=>{ combine(); };
+    input.onkeydown = (e)=>{ if(e.key==="Enter"){ goNext(); } };
+    body.appendChild(input);
+    setTimeout(()=>input.focus(), 30);
+
+    const ampmRow = document.createElement("div");
+    ampmRow.className = "options-grid";
+    ampmRow.style.marginTop = "10px";
+    ["AM","PM"].forEach(p=>{
+      const btn = document.createElement("button");
+      btn.className = "option-btn" + (period===p ? " selected":"");
+      btn.textContent = p;
+      btn.onclick = ()=>{ period = p; combine(); goNext(); };
+      ampmRow.appendChild(btn);
+    });
+    body.appendChild(ampmRow);
     body.appendChild(navButtons(f, true));
   }
   else if(f.type === "textarea"){
