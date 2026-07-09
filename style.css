@@ -187,10 +187,19 @@ label.field-label{display:block;font-weight:600;font-size:13px;color:#333;margin
   .question-title{font-size:19px;}
 }
 
-/* print */
-#printArea{display:none;}
+/* print / PDF export area.
+   IMPORTANT: this must stay laid-out (not display:none) or html2canvas
+   captures a zero-height canvas and the generated PDF comes out blank.
+   It's kept off-screen instead so it never shows in the normal UI. */
+#printArea{
+  position:absolute;
+  top:0;
+  left:-99999px;
+  width:800px;
+  background:#fff;
+}
 @media print{
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
-  #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;}
+  #printArea{position:absolute;top:0;left:0;width:100%;padding:20px;}
 }
