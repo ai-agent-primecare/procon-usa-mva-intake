@@ -417,8 +417,21 @@ function renderReview(){
   document.getElementById("emailBtn").onclick = ()=> emailIntake(order, groups);
 }
 
+/* Escapes text dropped into the print HTML so answers containing
+   <, >, & etc. can't break the markup. */
+function escapeHtml(v){
+  return String(v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
 /* Builds the shared printable summary markup used by both the PDF export
-   and the emailed PDF attachment. */
+   and the emailed PDF attachment.
+   IMPORTANT: html2canvas has notoriously unreliable support for CSS
+   flexbox (in particular `display:flex; justify-content:space-between`) —
+   it was clipping/dropping the right-hand "value" column entirely for
+   short answers and truncating longer ones at the page edge. Using a
+   plain <table> (two fixed-width <td> cells) instead renders correctly
+   in html2canvas, since table layout is well supported. */
 function buildSummaryHtml(order, groups){
   let html = `<div style="font-family:Georgia,serif;padding:10px;">
     <h1 style="color:#111;border-bottom:3px solid #d4af37;padding-bottom:8px;">Procon USA Law — MVA Intake Summary</h1>
@@ -427,12 +440,14 @@ function buildSummaryHtml(order, groups){
     const rows = groups[sec].filter(f=>state.answers[f.id]!==undefined);
     if(!rows.length) return;
     html += `<h2 style="font-size:15px;color:#a8842a;border-bottom:1px solid #ddd;margin-top:20px;">${sec}</h2>`;
+    html += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;">`;
     rows.forEach(f=>{
-      html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px dashed #eee;">
-        <span style="color:#555;">${currentLabel(f)}</span>
-        <strong>${fmtVal(state.answers[f.id])}</strong>
-      </div>`;
+      html += `<tr>
+        <td style="width:55%;text-align:left;vertical-align:top;color:#555;font-size:12px;padding:3px 6px 3px 0;border-bottom:1px dashed #eee;">${escapeHtml(currentLabel(f))}</td>
+        <td style="width:45%;text-align:right;vertical-align:top;font-weight:bold;font-size:12px;padding:3px 0 3px 6px;border-bottom:1px dashed #eee;word-wrap:break-word;">${escapeHtml(fmtVal(state.answers[f.id]))}</td>
+      </tr>`;
     });
+    html += `</table>`;
   });
   html += `</div>`;
   return html;
