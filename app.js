@@ -482,15 +482,25 @@ const PDF_OPT = {
   margin: 10,
   filename: 'procon-usa-mva-intake.pdf',
   image: { type: 'jpeg', quality: 0.98 },
-  html2canvas: { scale: 2 },
+  /* scrollX/scrollY:0 pins html2canvas's capture window to the top-left of
+     the page regardless of where the user has scrolled — without this it
+     can miscalculate the capture offset and clip or drop content
+     (confirmed by direct testing: right-aligned answer values were being
+     rendered completely outside the captured region). */
+  html2canvas: { scale: 2, scrollX: 0, scrollY: 0, useCORS: true },
   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
 };
 
-/* Builds the offscreen wrapper + printArea pair used for html2canvas export.
-   IMPORTANT: the element passed to html2canvas (printDiv) must stay in
+/* Builds the wrapper + printArea pair used for html2canvas export.
+   IMPORTANT #1: the element passed to html2canvas (printDiv) must stay in
    normal static-flow positioning — html2canvas renders a zero-height
    canvas for elements that are themselves position:absolute/fixed. The
-   WRAPPER (not printDiv) carries the offscreen positioning instead. */
+   WRAPPER (not printDiv) carries the positioning instead.
+   IMPORTANT #2: the wrapper covers the visible viewport (see .print-wrapper
+   in style.css) rather than being pushed far off-screen — a large negative
+   offset was confirmed to make html2canvas miscalculate its capture
+   region and silently clip/drop the answer column. The wrapper is only
+   in the DOM for the brief moment it takes to render, then removed. */
 function buildPrintNodes(order, groups){
   const wrapper = document.createElement("div");
   wrapper.className = "print-wrapper";
@@ -539,7 +549,16 @@ function emailIntake(order, groups){
       `please attach it to this email before sending.\n\n` +
       `Sent from the Procon USA Law MVA Intake tool.`;
     const mailtoUrl = `mailto:${INTAKE_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailtoUrl;
+    /* Trigger the mail client via a real <a> click instead of assigning
+       window.location.href directly — more reliably opens the OS mail
+       handler across browsers than a raw location navigation, which some
+       browsers silently swallow or show a blank interstitial for. */
+    const a = document.createElement("a");
+    a.href = mailtoUrl;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
     btn.disabled = false;
     btn.textContent = "✉ Email to " + INTAKE_EMAIL;
