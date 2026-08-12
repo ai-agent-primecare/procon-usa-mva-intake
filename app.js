@@ -196,12 +196,50 @@ const bicycleFlow = [
    accident-type-specific section)
 --------------------------------------------------------- */
 const clientInfoFlow = [
+  q("contact","Client Information","Contact","single",{
+    options:["ANS Altbaun","Procon"]
+  }),
   q("language","Client Information","Language","single",{
-    options:["Portuguese","English","Spanish","Other"]
+    options:["Portuguese","English","Spanish","ES","EP","Other"]
   }),
   q("languageOther","Client Information","Please specify the language","text",{
     condition: s => s.answers.language === "Other"
-  })
+  }),
+  q("needTranslator","Client Information","Need translator","single",{
+    options:["Yes","No"]
+  }),
+  q("clientIs","Client Information","Client is the:","single",{
+    options:["Driver","Passenger","Pedestrian"]
+  }),
+  q("clientPosition","Client Information","Client position in the car","single",{
+    options:["Driver","Front Passenger","Rear Left Passenger","Rear Middle Passenger","Rear Right Passenger"]
+  }),
+  q("lostWorkDay","Client Information","Lost day of work","single",{
+    options:["Yes","No"]
+  }),
+  q("employment","Client Information","Employment","text",{}),
+  q("fullName","Client Information","Full name","text",{}),
+  q("address","Client Information","Address","text",{}),
+  q("phone","Client Information","Phone","text",{}),
+  q("dob","Client Information","Date of birth","date",{}),
+  q("ssn","Client Information","SSN","text",{}),
+  q("email","Client Information","E-mail","text",{}),
+  q("dlNumber","Client Information","Driver's License Number","text",{}),
+  q("dlState","Client Information","Driver's License State","text",{}),
+  q("priorAccidents","Client Information","Any previous accident with a vehicle","textarea",{
+    placeholder:"Explain if applicable..."
+  }),
+  q("healthInsuranceType","Client Information","Type of Health Insurance","text",{}),
+  q("healthInsuranceName","Client Information","Health Insurance Name","text",{})
+];
+
+/* ---------------------------------------------------------
+   EMERGENCY CONTACT (final section)
+--------------------------------------------------------- */
+const emergencyContactFlow = [
+  q("emergencyName","Emergency Contact","Name","text",{}),
+  q("emergencyPhone","Emergency Contact","Phone","text",{}),
+  q("emergencyRelationship","Emergency Contact","Relationship","text",{})
 ];
 
 /* ---------------------------------------------------------
@@ -234,7 +272,8 @@ function buildFlow(){
     ...motorcycleFlow,
     ...pedestrianFlow,
     ...bicycleFlow,
-    ...clientInfoFlow
+    ...clientInfoFlow,
+    ...emergencyContactFlow
   ];
 }
 
