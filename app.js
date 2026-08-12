@@ -33,7 +33,8 @@ function q(id, section, label, type, opts){
 const kindOfAccidentFlow = [
   q("kindOfAccident","Kind of Accident","Kind of Accident","single",{
     options:[
-      "Driver or passenger of a car",
+      "Car",
+      "Truck",
       "Motorcycle/E-Scooter/E-Bike",
       "Pedestrian",
       "Bicycle Rider",
@@ -44,9 +45,11 @@ const kindOfAccidentFlow = [
 ];
 
 /* Helper predicates used to gate each accident-specific section so only
-   the one matching the answer above is shown. */
+   the one matching the answer above is shown. "Truck" follows the exact
+   same sequence as "Car" — both route into the Auto Accident Info flow. */
 function isAutoKind(s){
-  return s.answers.kindOfAccident === "Driver or passenger of a car" ||
+  return s.answers.kindOfAccident === "Car" ||
+         s.answers.kindOfAccident === "Truck" ||
          s.answers.kindOfAccident === "Taxi/Rideshare (Lyft/Uber)";
 }
 function isMotorcycleKind(s){ return s.answers.kindOfAccident === "Motorcycle/E-Scooter/E-Bike"; }
@@ -197,10 +200,13 @@ const bicycleFlow = [
 --------------------------------------------------------- */
 const clientInfoFlow = [
   q("contact","Client Information","Contact","single",{
-    options:["ANS Altbaun","Procon"]
+    options:["Altman Nussbaum Shunnarah","Procon"]
+  }),
+  q("contactBestTime","Client Information","When is the best time to contact?","text",{
+    condition: s => s.answers.contact === "Altman Nussbaum Shunnarah"
   }),
   q("language","Client Information","Language","single",{
-    options:["Portuguese","English","Spanish","ES","EP","Other"]
+    options:["Portuguese","English","Spanish","English/Spanish","English/Portuguese","Other"]
   }),
   q("languageOther","Client Information","Please specify the language","text",{
     condition: s => s.answers.language === "Other"
@@ -209,9 +215,9 @@ const clientInfoFlow = [
     options:["Yes","No"]
   }),
   q("clientIs","Client Information","Client is the:","single",{
-    options:["Driver","Passenger","Pedestrian"]
+    options:["Driver","Passenger"]
   }),
-  q("clientPosition","Client Information","Client position in the car","single",{
+  q("clientPosition","Client Information","Client position inside the car","carseat",{
     options:["Driver","Front Passenger","Rear Left Passenger","Rear Middle Passenger","Rear Right Passenger"]
   }),
   q("lostWorkDay","Client Information","Lost day of work","single",{
@@ -226,11 +232,26 @@ const clientInfoFlow = [
   q("email","Client Information","E-mail","text",{}),
   q("dlNumber","Client Information","Driver's License Number","text",{}),
   q("dlState","Client Information","Driver's License State","text",{}),
-  q("priorAccidents","Client Information","Any previous accident with a vehicle","textarea",{
-    placeholder:"Explain if applicable..."
+  q("priorAccidents","Client Information","Any previous accident with a vehicle","single",{
+    options:["None in less than 5 years","Yes, more than 5 years","Yes, less than 5 years"]
   }),
-  q("healthInsuranceType","Client Information","Type of Health Insurance","text",{}),
-  q("healthInsuranceName","Client Information","Health Insurance Name","text",{})
+  q("healthInsuranceType","Client Information","Type of Health Insurance","single",{
+    options:["Private","Masshealth","No Insurance"]
+  }),
+  q("healthInsuranceName","Client Information","Health Insurance Name","text",{}),
+  q("injuries","Client Information","Injuries","textarea",{
+    placeholder:"Describe the injuries..."
+  }),
+  q("ambulance","Client Information","Ambulance","single",{
+    options:["Yes","No"]
+  }),
+  q("er","Client Information","ER","single",{
+    options:["Yes","No"]
+  }),
+  q("erHospital","Client Information","Which hospital?","text",{
+    condition: s => s.answers.er === "Yes"
+  }),
+  q("clinic","Client Information","Clinic","text",{})
 ];
 
 /* ---------------------------------------------------------
@@ -421,6 +442,40 @@ function render(){
     ta.oninput = ()=>{ state.answers[f.id] = ta.value; };
     body.appendChild(ta);
     body.appendChild(navButtons(f, true));
+  }
+  else if(f.type === "carseat"){
+    // Visual car-seat picker: a simple top-down car outline with a button
+    // positioned over each seat, so the client's position can be chosen by
+    // clicking the actual seat instead of a plain text list.
+    const wrap = document.createElement("div");
+    wrap.className = "car-diagram";
+    wrap.innerHTML = `
+      <svg class="car-svg" viewBox="0 0 220 340" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="14" y="10" width="192" height="320" rx="46" fill="#f7f6f2" stroke="#d4af37" stroke-width="3"/>
+        <rect x="14" y="10" width="192" height="70" rx="34" fill="#ece9e2"/>
+        <text x="110" y="30" text-anchor="middle" font-size="12" letter-spacing="2" fill="#a8842a">FRONT</text>
+        <line x1="110" y1="90" x2="110" y2="300" stroke="#e7e7ea" stroke-width="2" stroke-dasharray="4 5"/>
+      </svg>
+    `;
+    const seatDefs = [
+      {label:"Driver", top:"27%", left:"25%"},
+      {label:"Front Passenger", top:"27%", left:"75%"},
+      {label:"Rear Left Passenger", top:"72%", left:"18%"},
+      {label:"Rear Middle Passenger", top:"78%", left:"50%"},
+      {label:"Rear Right Passenger", top:"72%", left:"82%"}
+    ];
+    seatDefs.forEach(seat=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "seat-btn" + (currentVal===seat.label ? " selected":"");
+      btn.style.top = seat.top;
+      btn.style.left = seat.left;
+      btn.textContent = seat.label;
+      btn.onclick = ()=>{ state.answers[f.id] = seat.label; goNext(); };
+      wrap.appendChild(btn);
+    });
+    body.appendChild(wrap);
+    body.appendChild(navButtons(f, false));
   }
   else if(f.type === "names"){
     const count = f.countFn(state) || 0;
