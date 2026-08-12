@@ -217,6 +217,9 @@ const clientInfoFlow = [
   q("clientIs","Client Information","Client is the:","single",{
     options:["Driver","Passenger"]
   }),
+  q("pipApplication","Client Information","PIP Application","single",{
+    options:["Yes","No"]
+  }),
   q("clientPosition","Client Information","Client position inside the car","carseat",{
     options:["Driver","Front Passenger","Rear Left Passenger","Rear Middle Passenger","Rear Right Passenger"]
   }),
@@ -238,7 +241,9 @@ const clientInfoFlow = [
   q("healthInsuranceType","Client Information","Type of Health Insurance","single",{
     options:["Private","Masshealth","No Insurance"]
   }),
-  q("healthInsuranceName","Client Information","Health Insurance Name","text",{}),
+  q("healthInsuranceName","Client Information","Health Insurance Name","text",{
+    condition: s => s.answers.healthInsuranceType === "Private"
+  }),
   q("injuries","Client Information","Injuries","textarea",{
     placeholder:"Describe the injuries..."
   }),
@@ -252,6 +257,24 @@ const clientInfoFlow = [
     condition: s => s.answers.er === "Yes"
   }),
   q("clinic","Client Information","Clinic","text",{})
+];
+
+/* ---------------------------------------------------------
+   DOCUMENTS OR INFORMATION BROUGHT BY OUR CLIENT (right after
+   Client Information, before Emergency Contact)
+--------------------------------------------------------- */
+const documentsFlow = [
+  q("docDriversLicense","Documents or information brought by our client","Valid Driver's License","single",{options:["Yes","No"]}),
+  q("docDriversLicenseOrigin","Documents or information brought by our client","Valid Driver's License from country of origin","single",{options:["Yes","No"]}),
+  q("docPassport","Documents or information brought by our client","Passport","single",{options:["Yes","No"]}),
+  q("docPoliceReport","Documents or information brought by our client","Police Report","single",{options:["Yes","No"]}),
+  q("docPoliceExchangeForm","Documents or information brought by our client","Police Exchange Form","single",{options:["Yes","No"]}),
+  q("docMedicalBills","Documents or information brought by our client","Medical Bills","single",{options:["Yes","No"]}),
+  q("docHospitalDischarge","Documents or information brought by our client","Hospital Discharge","single",{options:["Yes","No"]}),
+  q("docMasshealthCard","Documents or information brought by our client","Masshealth Insurance Card","single",{options:["Yes","No"]}),
+  q("docPrivateInsuranceCard","Documents or information brought by our client","Private Health Insurance Card","single",{options:["Yes","No"]}),
+  q("docAccidentPhotos","Documents or information brought by our client","Accident Photos","single",{options:["Yes","No"]}),
+  q("docTowReceipt","Documents or information brought by our client","Tow Receipt","single",{options:["Yes","No"]})
 ];
 
 /* ---------------------------------------------------------
@@ -294,6 +317,7 @@ function buildFlow(){
     ...pedestrianFlow,
     ...bicycleFlow,
     ...clientInfoFlow,
+    ...documentsFlow,
     ...emergencyContactFlow
   ];
 }
@@ -635,6 +659,40 @@ function escapeHtml(v){
    short answers and truncating longer ones at the page edge. Using a
    plain <table> (two fixed-width <td> cells) instead renders correctly
    in html2canvas, since table layout is well supported. */
+/* Static (non-interactive) version of the in-app car-seat diagram, used to
+   illustrate "Client position inside the car" inside the exported PDF —
+   the selected seat is highlighted the same way the on-screen picker
+   highlights it. */
+function buildCarSeatDiagramHtml(selected){
+  const seats = [
+    {label:"Driver", x:55, y:92},
+    {label:"Front Passenger", x:165, y:92},
+    {label:"Rear Left Passenger", x:40, y:246},
+    {label:"Rear Middle Passenger", x:110, y:266},
+    {label:"Rear Right Passenger", x:180, y:246}
+  ];
+  const seatMarkup = seats.map(s=>{
+    const isSel = s.label === selected;
+    const fill = isSel ? "#0b0b0c" : "#ffffff";
+    const stroke = isSel ? "#d4af37" : "#c9c9c9";
+    const textColor = isSel ? "#d4af37" : "#333333";
+    return `<g>
+      <rect x="${s.x-36}" y="${s.y-16}" width="72" height="32" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+      <text x="${s.x}" y="${s.y+4}" text-anchor="middle" font-size="8.5" font-family="Arial, sans-serif" fill="${textColor}" font-weight="bold">${escapeHtml(s.label)}</text>
+    </g>`;
+  }).join("");
+  return `<div style="margin:8px 0 18px;">
+    <div style="font-size:11px;color:#555;margin-bottom:6px;">Client position inside the car:</div>
+    <svg viewBox="0 0 220 340" width="170" height="263" xmlns="http://www.w3.org/2000/svg">
+      <rect x="14" y="10" width="192" height="320" rx="46" fill="#f7f6f2" stroke="#d4af37" stroke-width="3"/>
+      <rect x="14" y="10" width="192" height="70" rx="34" fill="#ece9e2"/>
+      <text x="110" y="30" text-anchor="middle" font-size="12" letter-spacing="2" fill="#a8842a">FRONT</text>
+      <line x1="110" y1="90" x2="110" y2="300" stroke="#e7e7ea" stroke-width="2" stroke-dasharray="4 5"/>
+      ${seatMarkup}
+    </svg>
+  </div>`;
+}
+
 function buildSummaryHtml(order, groups){
   let html = `<div style="font-family:Georgia,serif;padding:10px;">
     <h1 style="color:#111;border-bottom:3px solid #d4af37;padding-bottom:8px;">Procon USA Law — MVA Intake Summary</h1>
@@ -651,6 +709,10 @@ function buildSummaryHtml(order, groups){
       </tr>`;
     });
     html += `</table>`;
+    if(state.answers.clientPosition){
+      const hasClientPositionRow = rows.some(f=>f.id==="clientPosition");
+      if(hasClientPositionRow) html += buildCarSeatDiagramHtml(state.answers.clientPosition);
+    }
   });
   html += `</div>`;
   return html;
