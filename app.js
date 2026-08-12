@@ -91,13 +91,16 @@ const accidentInfoFlow = [
   q("carsInvolved","Accident Info","How many cars were involved in the accident?","single",{
     options:["1","2","3","4","5","6","7","8"]
   }),
-  q("carPosition","Accident Info","What position was the car in line?","single",{
-    options:["1","2","3","4","5","6","7","8"],
+  q("carPosition","Accident Info","What position were you in line?","single",{
+    optionsFn: s => { const n = parseInt(s.answers.carsInvolved,10)||0; const arr=[]; for(let i=1;i<=n;i++) arr.push(String(i)); return arr; },
     condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
   }),
   q("impactsFelt","Accident Info","How many impacts did they feel?","single",{
     options:["1","2","3","4","5","6"],
     condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
+  }),
+  q("airbagOpened","Accident Info","Did the airbag open?","single",{
+    options:["Yes","No","Doesn't know"]
   })
 ];
 
