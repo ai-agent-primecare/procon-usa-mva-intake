@@ -278,6 +278,40 @@ const documentsFlow = [
 ];
 
 /* ---------------------------------------------------------
+   VEHICLE INFORMATION (right after Documents, before Emergency Contact)
+--------------------------------------------------------- */
+function isVehiclePrivate(s){ return s.answers.vehicleInsuranceKind === "Private"; }
+function isVehicleCommercial(s){ return s.answers.vehicleInsuranceKind === "Commercial"; }
+
+const vehicleInfoFlow = [
+  q("vehiclePriorAccident","Vehicle Information","Has the vehicle suffered prior accident","single",{options:["Yes","No"]}),
+  q("vehicleFinanced","Vehicle Information","Is the vehicle financed","single",{options:["Yes","No"]}),
+  q("vehicleUpgrades","Vehicle Information","Any upgrades made on vehicle","single",{options:["Yes","No","N/A"]}),
+  q("vehicleGapInsurance","Vehicle Information","Is it insured with GAP","single",{options:["Yes","No","Client does not know"]}),
+  q("vehicleTowed","Vehicle Information","Was vehicle towed","single",{options:["Yes","No"]}),
+  q("vehicleLocation","Vehicle Information","Where is the vehicle","text",{}),
+  q("vehicleOwner","Vehicle Information","The owner of the car is the","text",{}),
+  q("ownerSameHouse","Vehicle Information","Does the owner of vehicle live in the same house as driver","single",{options:["Yes","No"]}),
+  q("vehicleCity","Vehicle Information","What city does the vehicle sleep in?","text",{}),
+  q("vehicleInsuranceKind","Vehicle Information","What kind of insurance does the vehicle have","single",{options:["Private","Commercial"]}),
+  q("driverIncludedInsurance","Vehicle Information","Is the driver included on the insurance","single",{
+    options:["Yes","No"], condition: isVehiclePrivate
+  }),
+  q("driverHoursPerWeek","Vehicle Information","How many hours does the driver use the vehicle per week","text",{
+    condition: s => isVehiclePrivate(s) && s.answers.driverIncludedInsurance === "No"
+  }),
+  q("driverIsEmployee","Vehicle Information","Is the driver an employee","single",{
+    options:["Yes","No"], condition: isVehicleCommercial
+  }),
+  q("contactedInsuranceCompany","Vehicle Information","Was contact made with Insurance company","single",{
+    options:["Yes","No"], condition: isVehicleCommercial
+  }),
+  q("whatWasSaid","Vehicle Information","What was said","text",{
+    condition: isVehicleCommercial
+  })
+];
+
+/* ---------------------------------------------------------
    EMERGENCY CONTACT (final section)
 --------------------------------------------------------- */
 const emergencyContactFlow = [
@@ -318,6 +352,7 @@ function buildFlow(){
     ...bicycleFlow,
     ...clientInfoFlow,
     ...documentsFlow,
+    ...vehicleInfoFlow,
     ...emergencyContactFlow
   ];
 }
