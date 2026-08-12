@@ -101,6 +101,12 @@ const accidentInfoFlow = [
   }),
   q("airbagOpened","Accident Info","Did the airbag open?","single",{
     options:["Yes","No","Doesn't know"]
+  }),
+  q("witness","Accident Info","Was there a witness?","single",{
+    options:["Yes","No"]
+  }),
+  q("witnessName","Accident Info","What is the person's name?","text",{
+    condition: s => s.answers.witness === "Yes"
   })
 ];
 
