@@ -27,6 +27,33 @@ function q(id, section, label, type, opts){
 }
 
 /* ---------------------------------------------------------
+   KIND OF ACCIDENT (very first question — determines which
+   accident-specific section is shown later)
+--------------------------------------------------------- */
+const kindOfAccidentFlow = [
+  q("kindOfAccident","Kind of Accident","Kind of Accident","single",{
+    options:[
+      "Driver or passenger of a car",
+      "Motorcycle/E-Scooter/E-Bike",
+      "Pedestrian",
+      "Bicycle Rider",
+      "Taxi/Rideshare (Lyft/Uber)"
+    ],
+    required:true
+  })
+];
+
+/* Helper predicates used to gate each accident-specific section so only
+   the one matching the answer above is shown. */
+function isAutoKind(s){
+  return s.answers.kindOfAccident === "Driver or passenger of a car" ||
+         s.answers.kindOfAccident === "Taxi/Rideshare (Lyft/Uber)";
+}
+function isMotorcycleKind(s){ return s.answers.kindOfAccident === "Motorcycle/E-Scooter/E-Bike"; }
+function isPedestrianKind(s){ return s.answers.kindOfAccident === "Pedestrian"; }
+function isBicycleKind(s){ return s.answers.kindOfAccident === "Bicycle Rider"; }
+
+/* ---------------------------------------------------------
    OCCUPANTS / CLIENTS BRANCHING (Section: "Occupants")
 --------------------------------------------------------- */
 const occupantsFlow = [
@@ -64,58 +91,116 @@ const occupantsFlow = [
 ];
 
 /* ---------------------------------------------------------
-   ACCIDENT INFO (asked right after occupants/client names)
+   AUTO ACCIDENT INFO (asked right after occupants/client names —
+   only for "Driver or passenger of a car" / "Taxi/Rideshare" kinds)
 --------------------------------------------------------- */
 const accidentInfoFlow = [
-  q("accidentDate","Accident Info","Day of accident (DOL)","date",{}),
-  q("accidentTime","Accident Info","Time of accident","time12",{placeholder:"e.g. 2:30"}),
-  q("accidentPlace","Accident Info","Place of accident","text",{}),
-  q("policeCame","Accident Info","Did the police come to the scene?","single",{
-    options:["Yes, state police","Yes, local police","No","Doesn't know"]
+  q("accidentDate","Auto Accident Info","Day of accident (DOL)","date",{
+    condition: isAutoKind
   }),
-  q("policeReport","Accident Info","Did the police make a report?","single",{
+  q("accidentTime","Auto Accident Info","Time of accident","time12",{placeholder:"e.g. 2:30",
+    condition: isAutoKind
+  }),
+  q("accidentPlace","Auto Accident Info","Place of accident","text",{
+    condition: isAutoKind
+  }),
+  q("policeCame","Auto Accident Info","Did the police come to the scene?","single",{
+    options:["Yes, state police","Yes, local police","No","Doesn't know"],
+    condition: isAutoKind
+  }),
+  q("policeReport","Auto Accident Info","Did the police make a report?","single",{
     options:[
       "Yes, we have a copy",
       "Yes, we are waiting a copy from client",
       "Yes, but only exchange report",
       "No",
       "Client doesn't know"
-    ]
+    ],
+    condition: isAutoKind
   }),
-  q("citation","Accident Info","Police gave a citation","single",{
-    options:["Yes","No","Doesn't know"]
+  q("citation","Auto Accident Info","Police gave a citation","single",{
+    options:["Yes","No","Doesn't know"],
+    condition: isAutoKind
   }),
-  q("citationType","Accident Info","What type of fine was it?","text",{
-    condition: s => s.answers.citation === "Yes"
+  q("citationType","Auto Accident Info","What type of fine was it?","text",{
+    condition: s => isAutoKind(s) && s.answers.citation === "Yes"
   }),
-  q("carsInvolved","Accident Info","How many cars were involved in the accident?","single",{
-    options:["1","2","3","4","5","6","7","8"]
+  q("carsInvolved","Auto Accident Info","How many cars were involved in the accident?","single",{
+    options:["1","2","3","4","5","6","7","8"],
+    condition: isAutoKind
   }),
-  q("carPosition","Accident Info","What position were you in line?","single",{
+  q("carPosition","Auto Accident Info","What position were you in line?","single",{
     optionsFn: s => { const n = parseInt(s.answers.carsInvolved,10)||0; const arr=[]; for(let i=1;i<=n;i++) arr.push(String(i)); return arr; },
-    condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
+    condition: s => isAutoKind(s) && (parseInt(s.answers.carsInvolved,10)||0) >= 3
   }),
-  q("impactsFelt","Accident Info","How many impacts did they feel?","single",{
+  q("impactsFelt","Auto Accident Info","How many impacts did they feel?","single",{
     options:["1","2","3","4","5","6"],
-    condition: s => (parseInt(s.answers.carsInvolved,10)||0) >= 3
+    condition: s => isAutoKind(s) && (parseInt(s.answers.carsInvolved,10)||0) >= 3
   }),
-  q("airbagOpened","Accident Info","Did the airbag open?","single",{
-    options:["Yes","No","Doesn't know"]
+  q("airbagOpened","Auto Accident Info","Did the airbag open?","single",{
+    options:["Yes","No","Doesn't know"],
+    condition: isAutoKind
   }),
-  q("witness","Accident Info","Was there a witness?","single",{
-    options:["Yes","No"]
+  q("witness","Auto Accident Info","Was there a witness?","single",{
+    options:["Yes","No"],
+    condition: isAutoKind
   }),
-  q("witnessName","Accident Info","What is the person's name?","text",{
-    condition: s => s.answers.witness === "Yes"
+  q("witnessName","Auto Accident Info","What is the person's name?","text",{
+    condition: s => isAutoKind(s) && s.answers.witness === "Yes"
   }),
-  q("carUseReason","Accident Info","Reason client was using the car","single",{
-    options:["Private","Commercial","Uber/Lyft","Going to work","Going home","Other"]
+  q("carUseReason","Auto Accident Info","Reason client was using the car","single",{
+    options:["Private","Commercial","Uber/Lyft","Going to work","Going home","Other"],
+    condition: isAutoKind
   }),
-  q("carUseReasonOther","Accident Info","Please specify","text",{
-    condition: s => s.answers.carUseReason === "Other"
+  q("carUseReasonOther","Auto Accident Info","Please specify","text",{
+    condition: s => isAutoKind(s) && s.answers.carUseReason === "Other"
   }),
-  q("accidentFacts","Accident Info","Facts of the accident","textarea",{
-    placeholder:"Explain what happened in the accident..."
+  q("accidentFacts","Auto Accident Info","Facts of the accident","textarea",{
+    placeholder:"Explain what happened in the accident...",
+    condition: isAutoKind
+  })
+];
+
+/* ---------------------------------------------------------
+   MOTORCYCLE ACCIDENT (only for "Motorcycle/E-Scooter/E-Bike")
+--------------------------------------------------------- */
+const motorcycleFlow = [
+  q("motorcycleFacts","Motorcycle Accident","Facts of the Motorcycle/E-Scooter/E-Bike accident","textarea",{
+    placeholder:"Explain what happened in the accident...",
+    condition: isMotorcycleKind
+  })
+];
+
+/* ---------------------------------------------------------
+   PEDESTRIAN ACCIDENT (only for "Pedestrian")
+--------------------------------------------------------- */
+const pedestrianFlow = [
+  q("pedestrianFacts","Pedestrian Accident","Facts of the Pedestrian accident","textarea",{
+    placeholder:"Explain what happened in the accident...",
+    condition: isPedestrianKind
+  })
+];
+
+/* ---------------------------------------------------------
+   BICYCLE RIDER ACCIDENT (only for "Bicycle Rider")
+--------------------------------------------------------- */
+const bicycleFlow = [
+  q("bicycleFacts","Bicycle Rider Accident","Facts of the Bicycle Rider accident","textarea",{
+    placeholder:"Explain what happened in the accident...",
+    condition: isBicycleKind
+  })
+];
+
+/* ---------------------------------------------------------
+   CLIENT INFORMATION (shown for every kind of accident, after the
+   accident-type-specific section)
+--------------------------------------------------------- */
+const clientInfoFlow = [
+  q("language","Client Information","Language","single",{
+    options:["Portuguese","English","Spanish","Other"]
+  }),
+  q("languageOther","Client Information","Please specify the language","text",{
+    condition: s => s.answers.language === "Other"
   })
 ];
 
@@ -143,8 +228,13 @@ function computeClients(s){
 function buildFlow(){
   state.clients = computeClients(state);
   return [
+    ...kindOfAccidentFlow,
     ...occupantsFlow,
-    ...accidentInfoFlow
+    ...accidentInfoFlow,
+    ...motorcycleFlow,
+    ...pedestrianFlow,
+    ...bicycleFlow,
+    ...clientInfoFlow
   ];
 }
 
