@@ -107,6 +107,15 @@ const accidentInfoFlow = [
   }),
   q("witnessName","Accident Info","What is the person's name?","text",{
     condition: s => s.answers.witness === "Yes"
+  }),
+  q("carUseReason","Accident Info","Reason client was using the car","single",{
+    options:["Private","Commercial","Uber/Lyft","Going to work","Going home","Other"]
+  }),
+  q("carUseReasonOther","Accident Info","Please specify","text",{
+    condition: s => s.answers.carUseReason === "Other"
+  }),
+  q("accidentFacts","Accident Info","Facts of the accident","textarea",{
+    placeholder:"Explain what happened in the accident..."
   })
 ];
 
@@ -278,6 +287,7 @@ function render(){
   }
   else if(f.type === "textarea"){
     const ta = document.createElement("textarea");
+    if(f.placeholder) ta.placeholder = f.placeholder;
     ta.value = currentVal || "";
     ta.oninput = ()=>{ state.answers[f.id] = ta.value; };
     body.appendChild(ta);
