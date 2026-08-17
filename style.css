@@ -196,9 +196,9 @@ label.field-label{display:block;font-weight:600;font-size:13px;color:#333;margin
   font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--gold-dark);
   border-bottom:2px solid var(--gray-light);padding-bottom:6px;margin-bottom:10px;
 }
-.review-item{display:flex;justify-content:space-between;gap:16px;padding:6px 0;font-size:14px;border-bottom:1px dashed var(--gray-light);}
-.review-item .rlabel{color:var(--gray);flex-shrink:0;max-width:60%;}
-.review-item .rval{font-weight:600;text-align:right;}
+.review-item{display:flex;justify-content:flex-start;align-items:baseline;gap:8px;padding:6px 0;font-size:14px;border-bottom:1px dashed var(--gray-light);}
+.review-item .rlabel{color:var(--gray);flex-shrink:0;}
+.review-item .rval{font-weight:600;text-align:left;color:#111;}
 .export-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;}
 
 .welcome-card{text-align:center;}
@@ -213,41 +213,4 @@ label.field-label{display:block;font-weight:600;font-size:13px;color:#333;margin
 @media(max-width:480px){
   .card{padding:24px 18px;}
   .question-title{font-size:19px;}
-}
-
-/* print / PDF export area.
-   IMPORTANT: html2canvas renders a ZERO-HEIGHT canvas if the captured
-   element itself has position:absolute/fixed (a known html2canvas quirk —
-   confirmed by direct testing). So #printArea must stay in normal static
-   flow — it sits inside a WRAPPER that carries the positioning instead.
-   IMPORTANT #2: putting the wrapper far off-screen (e.g. left:-99999px)
-   makes html2canvas miscalculate its capture window/offset — this was
-   confirmed to silently clip or completely drop the right-aligned answer
-   column. html2canvas reliably captures elements that are actually within
-   the viewport, so instead the wrapper covers the visible viewport (as an
-   opaque full-screen layer) for the brief moment it takes to render, then
-   gets removed immediately after the canvas is captured. */
-.print-wrapper{
-  position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  background:#fff;
-  z-index:99999;
-  overflow:auto;
-  display:flex;
-  justify-content:center;
-  padding:24px;
-  box-sizing:border-box;
-}
-#printArea{
-  width:800px;
-  max-width:100%;
-  background:#fff;
-}
-@media print{
-  body *{visibility:hidden;}
-  #printArea, #printArea *{visibility:visible;}
-  #printArea{position:absolute;top:0;left:0;width:100%;padding:20px;}
 }
