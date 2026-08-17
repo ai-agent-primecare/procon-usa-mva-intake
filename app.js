@@ -286,7 +286,7 @@ const documentsFlow = [
 ];
 
 /* ---------------------------------------------------------
-   VEHICLE INFORMATION (right after Documents — final section)
+   VEHICLE INFORMATION (right after Documents)
 --------------------------------------------------------- */
 function isVehiclePrivate(s){ return s.answers.vehicleInsuranceKind === "Private"; }
 function isVehicleCommercial(s){ return s.answers.vehicleInsuranceKind === "Commercial"; }
@@ -316,6 +316,55 @@ const vehicleInfoFlow = [
     condition: isVehicleCommercial
   })
 ];
+
+/* ---------------------------------------------------------
+   VEHICLES INVOLVED IN ACCIDENT (right after Vehicle Information)
+
+   The same block of questions repeats once per vehicle, driven by the
+   answer to "How many cars were involved in the accident?" — 3 cars means
+   the block is asked 3 times. Questions for vehicles beyond that count are
+   filtered out by their condition, so nothing extra is asked or exported.
+
+   That car-count question only exists for the auto kinds (Car / Truck /
+   Taxi-Rideshare), so for Motorcycle / Pedestrian / Bicycle intakes
+   carsInvolved is undefined, every condition below is false, and the whole
+   section drops out of the flow automatically.
+--------------------------------------------------------- */
+const MAX_VEHICLES = 8;   // matches the highest "cars involved" option
+const VEHICLE_FIELDS = [
+  ["registration",  "Registration",          "text"],
+  ["regState",      "State of registration", "text"],
+  ["owner",         "Owner",                 "text"],
+  ["address",       "Address",               "text"],
+  ["city",          "City",                  "text"],
+  ["state",         "State",                 "text"],
+  ["zip",           "Zip code",              "text"],
+  ["make",          "Make",                  "text"],
+  ["model",         "Model",                 "text"],
+  ["year",          "Year",                  "text"],
+  ["color",         "Color",                 "text"],
+  ["insurance",     "Insurance",             "text"],
+  ["claimNumber",   "Claim number",          "text"],
+  ["damage",        "Damage",                "textarea"]
+];
+
+const vehiclesInvolvedFlow = [];
+for(let n = 1; n <= MAX_VEHICLES; n++){
+  VEHICLE_FIELDS.forEach(function(def){
+    const key = def[0], label = def[1], type = def[2];
+    const opts = {
+      condition: s => (parseInt(s.answers.carsInvolved, 10) || 0) >= n
+    };
+    if(type === "textarea") opts.placeholder = "Describe the damage...";
+    vehiclesInvolvedFlow.push(
+      q("vehicle" + n + "_" + key,
+        "Vehicles involved in accident",
+        "Vehicle " + n + " — " + label,
+        type,
+        opts)
+    );
+  });
+}
 
 /* ---------------------------------------------------------
    BUILD FULL FLOW (recomputed live based on state)
@@ -348,7 +397,8 @@ function buildFlow(){
           (Auto Accident Info / Motorcycle / Pedestrian / Bicycle)
        5. Client Information (language → clinic)
        6. Documents or information brought by our client
-       7. Vehicle Information                                        */
+       7. Vehicle Information
+       8. Vehicles involved in accident (repeated per car involved)   */
   return [
     ...contactFlow,
     ...kindOfAccidentFlow,
@@ -359,7 +409,8 @@ function buildFlow(){
     ...bicycleFlow,
     ...clientInfoFlow,
     ...documentsFlow,
-    ...vehicleInfoFlow
+    ...vehicleInfoFlow,
+    ...vehiclesInvolvedFlow
   ];
 }
 
