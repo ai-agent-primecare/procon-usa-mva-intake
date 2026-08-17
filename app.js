@@ -621,14 +621,24 @@ function goBack(){ if(state.index>0){ state.index--; render(); } }
 /* ---------------------------------------------------------
    REVIEW / EXPORT
 --------------------------------------------------------- */
-function groupBySection(flow){
-  const groups = {};
-  const order = [];
+/* Splits the flow into consecutive RUNS of questions that share a section,
+   preserving the exact order the questions were asked in.
+
+   Grouping purely by section name would be wrong here: "Contact" and "When
+   is the best time to contact?" belong to the Client Information section but
+   are asked first, before Kind of Accident — a name-based grouping would
+   yank the whole Client Information block (Language → Clinic included) up to
+   the top of the document. Using runs instead means the exported Word file
+   and the on-screen review read in the same order the questions were
+   actually answered. */
+function groupIntoBlocks(flow){
+  const blocks = [];
   flow.forEach(f=>{
-    if(!groups[f.section]){ groups[f.section]=[]; order.push(f.section); }
-    groups[f.section].push(f);
+    const last = blocks[blocks.length-1];
+    if(last && last.section === f.section) last.fields.push(f);
+    else blocks.push({section: f.section, fields: [f]});
   });
-  return {groups, order};
+  return blocks;
 }
 
 function fmtVal(v){
@@ -641,7 +651,7 @@ function renderReview(){
   progressBar.style.width = "100%";
   sectionLabel.textContent = "Review";
   const flow = visibleFlow();
-  const {groups, order} = groupBySection(flow);
+  const blocks = groupIntoBlocks(flow);
 
   app.innerHTML = "";
   const card = document.createElement("div");
@@ -659,19 +669,19 @@ function renderReview(){
   card.appendChild(sub);
 
   const reviewWrap = document.createElement("div");
-  order.forEach(sec=>{
+  blocks.forEach(block=>{
+    const rows = block.fields.filter(f=>state.answers[f.id]!==undefined);
+    if(!rows.length) return;
     const secDiv = document.createElement("div");
     secDiv.className = "review-section";
     const h3 = document.createElement("h3");
-    h3.textContent = sec;
+    h3.textContent = block.section;
     secDiv.appendChild(h3);
-    groups[sec].forEach(f=>{
-      const val = state.answers[f.id];
-      if(val === undefined) return;
+    rows.forEach(f=>{
       const item = document.createElement("div");
       item.className = "review-item";
       const l = document.createElement("span"); l.className="rlabel"; l.textContent = currentLabel(f) + ":";
-      const v = document.createElement("span"); v.className="rval"; v.textContent = fmtVal(val);
+      const v = document.createElement("span"); v.className="rval"; v.textContent = fmtVal(state.answers[f.id]);
       item.appendChild(l); item.appendChild(v);
       secDiv.appendChild(item);
     });
@@ -702,8 +712,8 @@ function renderReview(){
       state.answers = {}; state.clients=[]; state.index = -1; renderWelcome();
     }
   };
-  document.getElementById("docxBtn").onclick = ()=> exportDocx(order, groups);
-  document.getElementById("emailBtn").onclick = ()=> emailIntake(order, groups);
+  document.getElementById("docxBtn").onclick = ()=> exportDocx(blocks);
+  document.getElementById("emailBtn").onclick = ()=> emailIntake(blocks);
 }
 
 /* ---------------------------------------------------------
@@ -822,13 +832,15 @@ function emptyCell(){
 }
 
 /* Builds the ordered list of docx content blocks (paragraphs/tables/images)
-   for the full intake summary. Every answer is kept directly beside its
-   question (bold label immediately followed by the value on the same
+   for the full intake summary. The document follows the EXACT order the
+   questions were asked in (see groupIntoBlocks) so the Word file reads the
+   same way the intake was conducted. Every answer is kept directly beside
+   its question (bold label immediately followed by the value on the same
    line) rather than pushed off to a separate column — per Procon's
    request that answers stay close to the question instead of drifting to
    the right side of the page. The Documents section renders as a
    two-column table since every question there is a short Yes/No answer. */
-function buildDocxChildren(order, groups){
+function buildDocxChildren(blocks){
   const docx = window.docx;
   const children = [];
 
@@ -842,8 +854,9 @@ function buildDocxChildren(order, groups){
     spacing: { after: 200 }
   }));
 
-  order.forEach(sec=>{
-    const rows = groups[sec].filter(f=>state.answers[f.id]!==undefined);
+  blocks.forEach(block=>{
+    const sec = block.section;
+    const rows = block.fields.filter(f=>state.answers[f.id]!==undefined);
     if(!rows.length) return;
 
     children.push(new docx.Paragraph({
@@ -895,10 +908,10 @@ function buildDocxChildren(order, groups){
   return children;
 }
 
-function buildDocxBlob(order, groups){
+function buildDocxBlob(blocks){
   const docx = window.docx;
   const doc = new docx.Document({
-    sections: [{ properties: {}, children: buildDocxChildren(order, groups) }]
+    sections: [{ properties: {}, children: buildDocxChildren(blocks) }]
   });
   return docx.Packer.toBlob(doc);
 }
@@ -922,10 +935,10 @@ function setStatus(msg, kind){
   el.style.color = kind === "error" ? "#b33" : kind === "ok" ? "#2a7a2a" : "";
 }
 
-function exportDocx(order, groups){
+function exportDocx(blocks){
   const btn = document.getElementById("docxBtn");
   if(btn){ btn.disabled = true; btn.textContent = "Preparing…"; }
-  buildDocxBlob(order, groups).then(blob=>{
+  buildDocxBlob(blocks).then(blob=>{
     downloadBlob(blob, "procon-usa-mva-intake.docx");
     if(btn){ btn.disabled = false; btn.textContent = "⬇ Download Word Document"; }
   }).catch(err=>{
@@ -934,13 +947,13 @@ function exportDocx(order, groups){
   });
 }
 
-function emailIntake(order, groups){
+function emailIntake(blocks){
   const btn = document.getElementById("emailBtn");
   btn.disabled = true;
   btn.textContent = "Preparing…";
   setStatus("Generating Word document…");
 
-  buildDocxBlob(order, groups).then(blob=>{
+  buildDocxBlob(blocks).then(blob=>{
     downloadBlob(blob, "procon-usa-mva-intake.docx");
 
     const clientNames = state.clients.map(c=>c.name).filter(Boolean).join(", ") || "Unnamed";
