@@ -107,8 +107,8 @@ const occupantsFlow = [
 ];
 
 /* ---------------------------------------------------------
-   AUTO ACCIDENT INFO (asked after Client Information —
-   only for "Car" / "Truck" / "Taxi/Rideshare" kinds)
+   AUTO ACCIDENT INFO (asked right after Occupants, before Client
+   Information — only for "Car" / "Truck" / "Taxi/Rideshare" kinds)
 --------------------------------------------------------- */
 const accidentInfoFlow = [
   q("accidentDate","Auto Accident Info","Day of accident (DOL)","date",{
@@ -209,9 +209,8 @@ const bicycleFlow = [
 
 /* ---------------------------------------------------------
    CLIENT INFORMATION (shown for every kind of accident, right after
-   the Occupants section and before the accident-details section).
-   "Contact" and "When is the best time to contact?" live in
-   contactFlow instead — they open the intake.
+   the accident-details section). "Contact" and "When is the best
+   time to contact?" live in contactFlow instead — they open the intake.
 --------------------------------------------------------- */
 const clientInfoFlow = [
   q("language","Client Information","Language","single",{
@@ -270,7 +269,7 @@ const clientInfoFlow = [
 
 /* ---------------------------------------------------------
    DOCUMENTS OR INFORMATION BROUGHT BY OUR CLIENT (right after
-   the accident-details section, before Vehicle Information)
+   Client Information, before Vehicle Information)
 --------------------------------------------------------- */
 const documentsFlow = [
   q("docDriversLicense","Documents or information brought by our client","Valid Driver's License","single",{options:["Yes","No"]}),
@@ -345,20 +344,20 @@ function buildFlow(){
        1. Contact + best time to contact  (contactFlow)
        2. Kind of Accident
        3. Occupants
-       4. Client Information (language → clinic)
-       5. Accident details for whichever kind was chosen
+       4. Accident details for whichever kind was chosen
           (Auto Accident Info / Motorcycle / Pedestrian / Bicycle)
+       5. Client Information (language → clinic)
        6. Documents or information brought by our client
        7. Vehicle Information                                        */
   return [
     ...contactFlow,
     ...kindOfAccidentFlow,
     ...occupantsFlow,
-    ...clientInfoFlow,
     ...accidentInfoFlow,
     ...motorcycleFlow,
     ...pedestrianFlow,
     ...bicycleFlow,
+    ...clientInfoFlow,
     ...documentsFlow,
     ...vehicleInfoFlow
   ];
