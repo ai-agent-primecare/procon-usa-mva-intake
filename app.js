@@ -14,9 +14,10 @@ const state = {
 };
 
 /* Where the completed intake gets emailed. No third-party relay is used —
-   the PDF is generated and downloaded locally, then a pre-filled email
-   draft opens in the user's own mail client (mailto:). Nothing leaves the
-   browser except through the user's own email account. */
+   the Word document is generated and downloaded locally in the browser
+   (via the docx library, which runs entirely client-side), then a
+   pre-filled email draft opens in the user's own mail client (mailto:).
+   Nothing leaves the browser except through the user's own email account. */
 const INTAKE_EMAIL = "ai-agent@rockwood-enterprise.com";
 
 /* ---------------------------------------------------------
@@ -27,8 +28,20 @@ function q(id, section, label, type, opts){
 }
 
 /* ---------------------------------------------------------
-   KIND OF ACCIDENT (very first question — determines which
-   accident-specific section is shown later)
+   CONTACT (the very first questions asked, before anything else)
+--------------------------------------------------------- */
+const contactFlow = [
+  q("contact","Client Information","Contact","single",{
+    options:["Altman Nussbaum Shunnarah","Procon"]
+  }),
+  q("contactBestTime","Client Information","When is the best time to contact?","text",{
+    condition: s => s.answers.contact === "Altman Nussbaum Shunnarah"
+  })
+];
+
+/* ---------------------------------------------------------
+   KIND OF ACCIDENT (determines which accident-specific section
+   is shown later)
 --------------------------------------------------------- */
 const kindOfAccidentFlow = [
   q("kindOfAccident","Kind of Accident","Kind of Accident","single",{
@@ -196,15 +209,10 @@ const bicycleFlow = [
 
 /* ---------------------------------------------------------
    CLIENT INFORMATION (shown for every kind of accident, after the
-   accident-type-specific section)
+   accident-type-specific section). "Contact" and "When is the best
+   time to contact?" live in contactFlow instead — asked first.
 --------------------------------------------------------- */
 const clientInfoFlow = [
-  q("contact","Client Information","Contact","single",{
-    options:["Altman Nussbaum Shunnarah","Procon"]
-  }),
-  q("contactBestTime","Client Information","When is the best time to contact?","text",{
-    condition: s => s.answers.contact === "Altman Nussbaum Shunnarah"
-  }),
   q("language","Client Information","Language","single",{
     options:["Portuguese","English","Spanish","English/Spanish","English/Portuguese","Other"]
   }),
@@ -221,7 +229,7 @@ const clientInfoFlow = [
     options:["Yes","No"]
   }),
   q("clientPosition","Client Information","Client position inside the car","carseat",{
-    options:["Driver","Front Passenger","Rear Left Passenger","Rear Middle Passenger","Rear Right Passenger"]
+    options:["Driver","Front Passenger","Rear Driver Side","Rear Middle","Rear Passenger Side"]
   }),
   q("lostWorkDay","Client Information","Lost day of work","single",{
     options:["Yes","No"]
@@ -261,7 +269,7 @@ const clientInfoFlow = [
 
 /* ---------------------------------------------------------
    DOCUMENTS OR INFORMATION BROUGHT BY OUR CLIENT (right after
-   Client Information, before Emergency Contact)
+   Client Information, before Vehicle Information)
 --------------------------------------------------------- */
 const documentsFlow = [
   q("docDriversLicense","Documents or information brought by our client","Valid Driver's License","single",{options:["Yes","No"]}),
@@ -278,7 +286,7 @@ const documentsFlow = [
 ];
 
 /* ---------------------------------------------------------
-   VEHICLE INFORMATION (right after Documents, before Emergency Contact)
+   VEHICLE INFORMATION (right after Documents — final section)
 --------------------------------------------------------- */
 function isVehiclePrivate(s){ return s.answers.vehicleInsuranceKind === "Private"; }
 function isVehicleCommercial(s){ return s.answers.vehicleInsuranceKind === "Commercial"; }
@@ -286,8 +294,6 @@ function isVehicleCommercial(s){ return s.answers.vehicleInsuranceKind === "Comm
 const vehicleInfoFlow = [
   q("vehiclePriorAccident","Vehicle Information","Has the vehicle suffered prior accident","single",{options:["Yes","No"]}),
   q("vehicleFinanced","Vehicle Information","Is the vehicle financed","single",{options:["Yes","No"]}),
-  q("vehicleUpgrades","Vehicle Information","Any upgrades made on vehicle","single",{options:["Yes","No","N/A"]}),
-  q("vehicleGapInsurance","Vehicle Information","Is it insured with GAP","single",{options:["Yes","No","Client does not know"]}),
   q("vehicleTowed","Vehicle Information","Was vehicle towed","single",{options:["Yes","No"]}),
   q("vehicleLocation","Vehicle Information","Where is the vehicle","text",{}),
   q("vehicleOwner","Vehicle Information","The owner of the car is the","text",{}),
@@ -309,15 +315,6 @@ const vehicleInfoFlow = [
   q("whatWasSaid","Vehicle Information","What was said","text",{
     condition: isVehicleCommercial
   })
-];
-
-/* ---------------------------------------------------------
-   EMERGENCY CONTACT (final section)
---------------------------------------------------------- */
-const emergencyContactFlow = [
-  q("emergencyName","Emergency Contact","Name","text",{}),
-  q("emergencyPhone","Emergency Contact","Phone","text",{}),
-  q("emergencyRelationship","Emergency Contact","Relationship","text",{})
 ];
 
 /* ---------------------------------------------------------
@@ -344,6 +341,7 @@ function computeClients(s){
 function buildFlow(){
   state.clients = computeClients(state);
   return [
+    ...contactFlow,
     ...kindOfAccidentFlow,
     ...occupantsFlow,
     ...accidentInfoFlow,
@@ -352,8 +350,7 @@ function buildFlow(){
     ...bicycleFlow,
     ...clientInfoFlow,
     ...documentsFlow,
-    ...vehicleInfoFlow,
-    ...emergencyContactFlow
+    ...vehicleInfoFlow
   ];
 }
 
@@ -374,6 +371,16 @@ function currentLabel(f){
   return f.label;
 }
 
+/* Formats raw digits typed into a date field as MM-DD-YYYY, stripping
+   anything that isn't a digit and inserting dashes as the user types. */
+function formatMDY(raw){
+  const digits = String(raw||"").replace(/\D/g,"").slice(0,8);
+  let out = digits.slice(0,2);
+  if(digits.length > 2) out += "-" + digits.slice(2,4);
+  if(digits.length > 4) out += "-" + digits.slice(4,8);
+  return out;
+}
+
 function renderWelcome(){
   progressBar.style.width = "0%";
   sectionLabel.textContent = "";
@@ -382,7 +389,7 @@ function renderWelcome(){
   card.className = "card welcome-card";
   card.innerHTML = `
     <h2 class="question-title">MVA Intake — Procon USA Law</h2>
-    <p>Answer each question by clicking a choice. Your progress is saved as you go, and you'll get a downloadable PDF summary at the end.</p>
+    <p>Answer each question by clicking a choice. Your progress is saved as you go, and you'll get a downloadable Word document summary at the end.</p>
     <div class="nav-row" style="justify-content:center;">
       <button class="btn btn-primary" id="startBtn">Start Intake</button>
     </div>
@@ -454,10 +461,21 @@ function render(){
   }
   else if(f.type === "text" || f.type === "date"){
     const input = document.createElement("input");
-    input.type = f.type === "date" ? "date" : "text";
-    if(f.placeholder) input.placeholder = f.placeholder;
+    input.type = "text";
+    if(f.type === "date"){
+      input.placeholder = "MM-DD-YYYY";
+      input.setAttribute("inputmode","numeric");
+      input.maxLength = 10;
+    } else if(f.placeholder){
+      input.placeholder = f.placeholder;
+    }
     input.value = currentVal || (f.defaultValueFn ? f.defaultValueFn(state) : "") || "";
-    input.oninput = ()=>{ state.answers[f.id] = input.value; };
+    input.oninput = ()=>{
+      if(f.type === "date"){
+        input.value = formatMDY(input.value);
+      }
+      state.answers[f.id] = input.value;
+    };
     input.onkeydown = (e)=>{ if(e.key==="Enter"){ goNext(); } };
     body.appendChild(input);
     setTimeout(()=>input.focus(), 30);
@@ -519,9 +537,9 @@ function render(){
     const seatDefs = [
       {label:"Driver", top:"27%", left:"25%"},
       {label:"Front Passenger", top:"27%", left:"75%"},
-      {label:"Rear Left Passenger", top:"72%", left:"18%"},
-      {label:"Rear Middle Passenger", top:"78%", left:"50%"},
-      {label:"Rear Right Passenger", top:"72%", left:"82%"}
+      {label:"Rear Driver Side", top:"72%", left:"18%"},
+      {label:"Rear Middle", top:"78%", left:"50%"},
+      {label:"Rear Passenger Side", top:"72%", left:"82%"}
     ];
     seatDefs.forEach(seat=>{
       const btn = document.createElement("button");
@@ -628,7 +646,7 @@ function renderReview(){
 
   const sub = document.createElement("p");
   sub.className = "question-sub";
-  sub.textContent = `Review the intake below, then download a PDF summary for the file — or click Email to download the PDF and open a pre-filled draft to ${INTAKE_EMAIL} (attach the PDF and hit Send).`;
+  sub.textContent = `Review the intake below, then download a Word document summary for the file — or click Email to download the Word document and open a pre-filled draft to ${INTAKE_EMAIL} (attach the document and hit Send).`;
   card.appendChild(sub);
 
   const reviewWrap = document.createElement("div");
@@ -643,7 +661,7 @@ function renderReview(){
       if(val === undefined) return;
       const item = document.createElement("div");
       item.className = "review-item";
-      const l = document.createElement("span"); l.className="rlabel"; l.textContent = currentLabel(f);
+      const l = document.createElement("span"); l.className="rlabel"; l.textContent = currentLabel(f) + ":";
       const v = document.createElement("span"); v.className="rval"; v.textContent = fmtVal(val);
       item.appendChild(l); item.appendChild(v);
       secDiv.appendChild(item);
@@ -656,7 +674,7 @@ function renderReview(){
   actions.className = "export-actions";
   actions.innerHTML = `
     <button class="btn btn-primary" id="emailBtn">✉ Email to ${INTAKE_EMAIL}</button>
-    <button class="btn btn-secondary" id="pdfBtn">⬇ Download PDF</button>
+    <button class="btn btn-secondary" id="docxBtn">⬇ Download Word Document</button>
     <button class="btn btn-secondary" id="editBtn">← Edit Answers</button>
     <button class="btn btn-ghost" id="restartBtn">Start New Intake</button>
   `;
@@ -675,143 +693,217 @@ function renderReview(){
       state.answers = {}; state.clients=[]; state.index = -1; renderWelcome();
     }
   };
-  document.getElementById("pdfBtn").onclick = ()=> exportPDF(order, groups);
+  document.getElementById("docxBtn").onclick = ()=> exportDocx(order, groups);
   document.getElementById("emailBtn").onclick = ()=> emailIntake(order, groups);
 }
 
-/* Escapes text dropped into the print HTML so answers containing
-   <, >, & etc. can't break the markup. */
-function escapeHtml(v){
-  return String(v)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+/* ---------------------------------------------------------
+   CAR-SEAT DIAGRAM (canvas-drawn image, embedded into the exported
+   Word document) — mirrors the on-screen picker's seat positions and
+   highlight styling using the same renamed seat labels.
+--------------------------------------------------------- */
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
 }
+function wrapCanvasText(ctx, text, cx, cy, maxWidth, lineHeight){
+  const words = String(text).split(" ");
+  const lines = [];
+  let cur = "";
+  words.forEach(w=>{
+    const test = cur ? cur+" "+w : w;
+    if(ctx.measureText(test).width > maxWidth && cur){ lines.push(cur); cur = w; }
+    else cur = test;
+  });
+  if(cur) lines.push(cur);
+  const startY = cy - ((lines.length-1)*lineHeight)/2 + 3;
+  lines.forEach((ln,i)=> ctx.fillText(ln, cx, startY + i*lineHeight));
+}
+function buildCarSeatDiagramCanvas(selected){
+  const W = 220, H = 340, scale = 3;
+  const canvas = document.createElement("canvas");
+  canvas.width = W*scale;
+  canvas.height = H*scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0,0,W,H);
 
-/* Builds the shared printable summary markup used by both the PDF export
-   and the emailed PDF attachment.
-   IMPORTANT: html2canvas has notoriously unreliable support for CSS
-   flexbox (in particular `display:flex; justify-content:space-between`) —
-   it was clipping/dropping the right-hand "value" column entirely for
-   short answers and truncating longer ones at the page edge. Using a
-   plain <table> (two fixed-width <td> cells) instead renders correctly
-   in html2canvas, since table layout is well supported. */
-/* Static (non-interactive) version of the in-app car-seat diagram, used to
-   illustrate "Client position inside the car" inside the exported PDF —
-   the selected seat is highlighted the same way the on-screen picker
-   highlights it. */
-function buildCarSeatDiagramHtml(selected){
+  roundRectPath(ctx, 14,10,192,320,46);
+  ctx.fillStyle = "#f7f6f2"; ctx.fill();
+  ctx.strokeStyle = "#d4af37"; ctx.lineWidth = 3; ctx.stroke();
+
+  roundRectPath(ctx, 14,10,192,70,34);
+  ctx.fillStyle = "#ece9e2"; ctx.fill();
+
+  ctx.fillStyle = "#a8842a";
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("FRONT", 110, 34);
+
+  ctx.strokeStyle = "#e7e7ea"; ctx.lineWidth = 2; ctx.setLineDash([4,5]);
+  ctx.beginPath(); ctx.moveTo(110,90); ctx.lineTo(110,300); ctx.stroke();
+  ctx.setLineDash([]);
+
   const seats = [
     {label:"Driver", x:55, y:92},
     {label:"Front Passenger", x:165, y:92},
-    {label:"Rear Left Passenger", x:40, y:246},
-    {label:"Rear Middle Passenger", x:110, y:266},
-    {label:"Rear Right Passenger", x:180, y:246}
+    {label:"Rear Driver Side", x:40, y:246},
+    {label:"Rear Middle", x:110, y:266},
+    {label:"Rear Passenger Side", x:180, y:246}
   ];
-  const seatMarkup = seats.map(s=>{
+  seats.forEach(s=>{
     const isSel = s.label === selected;
-    const fill = isSel ? "#0b0b0c" : "#ffffff";
-    const stroke = isSel ? "#d4af37" : "#c9c9c9";
-    const textColor = isSel ? "#d4af37" : "#333333";
-    return `<g>
-      <rect x="${s.x-36}" y="${s.y-16}" width="72" height="32" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
-      <text x="${s.x}" y="${s.y+4}" text-anchor="middle" font-size="8.5" font-family="Arial, sans-serif" fill="${textColor}" font-weight="bold">${escapeHtml(s.label)}</text>
-    </g>`;
-  }).join("");
-  return `<div style="margin:8px 0 18px;">
-    <div style="font-size:11px;color:#555;margin-bottom:6px;">Client position inside the car:</div>
-    <svg viewBox="0 0 220 340" width="170" height="263" xmlns="http://www.w3.org/2000/svg">
-      <rect x="14" y="10" width="192" height="320" rx="46" fill="#f7f6f2" stroke="#d4af37" stroke-width="3"/>
-      <rect x="14" y="10" width="192" height="70" rx="34" fill="#ece9e2"/>
-      <text x="110" y="30" text-anchor="middle" font-size="12" letter-spacing="2" fill="#a8842a">FRONT</text>
-      <line x1="110" y1="90" x2="110" y2="300" stroke="#e7e7ea" stroke-width="2" stroke-dasharray="4 5"/>
-      ${seatMarkup}
-    </svg>
-  </div>`;
+    roundRectPath(ctx, s.x-36, s.y-16, 72, 32, 6);
+    ctx.fillStyle = isSel ? "#0b0b0c" : "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = isSel ? "#d4af37" : "#c9c9c9";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = isSel ? "#d4af37" : "#333333";
+    ctx.font = "bold 8.5px Arial";
+    ctx.textAlign = "center";
+    wrapCanvasText(ctx, s.label, s.x, s.y, 66, 10);
+  });
+
+  return canvas;
+}
+function canvasToPngBytes(canvas){
+  const dataUrl = canvas.toDataURL("image/png");
+  const base64 = dataUrl.split(",")[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
-function buildSummaryHtml(order, groups){
-  let html = `<div style="font-family:Georgia,serif;padding:10px;">
-    <h1 style="color:#111;border-bottom:3px solid #d4af37;padding-bottom:8px;">Procon USA Law — MVA Intake Summary</h1>
-    <p style="color:#666;font-size:12px;">Generated ${new Date().toLocaleString()}</p>`;
+/* ---------------------------------------------------------
+   WORD DOCUMENT EXPORT (via the docx library, loaded from CDN as
+   window.docx — runs entirely client-side, no data leaves the browser)
+--------------------------------------------------------- */
+const CELL_BORDER = { style: "single", size: 2, color: "DDDDDD" };
+const CELL_BORDERS = { top: CELL_BORDER, bottom: CELL_BORDER, left: CELL_BORDER, right: CELL_BORDER };
+
+function qaCell(f){
+  const docx = window.docx;
+  return new docx.TableCell({
+    width: { size: 50, type: docx.WidthType.PERCENTAGE },
+    borders: CELL_BORDERS,
+    margins: { top:80, bottom:80, left:100, right:100 },
+    children: [ new docx.Paragraph({
+      children: [
+        new docx.TextRun({ text: currentLabel(f) + ": ", bold: true, size: 20, color: "555555" }),
+        new docx.TextRun({ text: fmtVal(state.answers[f.id]), size: 20, color: "111111" })
+      ]
+    }) ]
+  });
+}
+function emptyCell(){
+  const docx = window.docx;
+  return new docx.TableCell({
+    width: { size: 50, type: docx.WidthType.PERCENTAGE },
+    borders: CELL_BORDERS,
+    children: [ new docx.Paragraph({ children: [] }) ]
+  });
+}
+
+/* Builds the ordered list of docx content blocks (paragraphs/tables/images)
+   for the full intake summary. Every answer is kept directly beside its
+   question (bold label immediately followed by the value on the same
+   line) rather than pushed off to a separate column — per Procon's
+   request that answers stay close to the question instead of drifting to
+   the right side of the page. The Documents section renders as a
+   two-column table since every question there is a short Yes/No answer. */
+function buildDocxChildren(order, groups){
+  const docx = window.docx;
+  const children = [];
+
+  children.push(new docx.Paragraph({
+    children: [ new docx.TextRun({ text: "Procon USA Law — MVA Intake Summary", bold: true, size: 32, color: "111111" }) ],
+    border: { bottom: { style: "single", size: 18, color: "D4AF37", space: 6 } },
+    spacing: { after: 120 }
+  }));
+  children.push(new docx.Paragraph({
+    children: [ new docx.TextRun({ text: "Generated " + new Date().toLocaleString(), size: 18, color: "666666" }) ],
+    spacing: { after: 200 }
+  }));
+
   order.forEach(sec=>{
     const rows = groups[sec].filter(f=>state.answers[f.id]!==undefined);
     if(!rows.length) return;
-    html += `<h2 style="font-size:15px;color:#a8842a;border-bottom:1px solid #ddd;margin-top:20px;">${sec}</h2>`;
-    html += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;">`;
-    rows.forEach(f=>{
-      html += `<tr>
-        <td style="width:55%;text-align:left;vertical-align:top;color:#555;font-size:12px;padding:3px 6px 3px 0;border-bottom:1px dashed #eee;">${escapeHtml(currentLabel(f))}</td>
-        <td style="width:45%;text-align:right;vertical-align:top;font-weight:bold;font-size:12px;padding:3px 0 3px 6px;border-bottom:1px dashed #eee;word-wrap:break-word;">${escapeHtml(fmtVal(state.answers[f.id]))}</td>
-      </tr>`;
-    });
-    html += `</table>`;
-    if(state.answers.clientPosition){
-      const hasClientPositionRow = rows.some(f=>f.id==="clientPosition");
-      if(hasClientPositionRow) html += buildCarSeatDiagramHtml(state.answers.clientPosition);
+
+    children.push(new docx.Paragraph({
+      children: [ new docx.TextRun({ text: sec, bold: true, size: 24, color: "A8842A" }) ],
+      border: { bottom: { style: "single", size: 6, color: "DDDDDD", space: 4 } },
+      spacing: { before: 240, after: 120 }
+    }));
+
+    if(sec === "Documents or information brought by our client"){
+      const tableRows = [];
+      for(let i=0;i<rows.length;i+=2){
+        const left = rows[i];
+        const right = rows[i+1];
+        tableRows.push(new docx.TableRow({
+          children: [ qaCell(left), right ? qaCell(right) : emptyCell() ]
+        }));
+      }
+      children.push(new docx.Table({
+        width: { size: 100, type: docx.WidthType.PERCENTAGE },
+        rows: tableRows
+      }));
+    } else {
+      rows.forEach(f=>{
+        children.push(new docx.Paragraph({
+          children: [
+            new docx.TextRun({ text: currentLabel(f) + ": ", bold: true, size: 20, color: "555555" }),
+            new docx.TextRun({ text: fmtVal(state.answers[f.id]), size: 20, color: "111111" })
+          ],
+          spacing: { after: 60 }
+        }));
+      });
+
+      if(sec === "Client Information" && state.answers.clientPosition){
+        const hasClientPositionRow = rows.some(fld=>fld.id==="clientPosition");
+        if(hasClientPositionRow){
+          const imgBytes = canvasToPngBytes(buildCarSeatDiagramCanvas(state.answers.clientPosition));
+          children.push(new docx.Paragraph({
+            children: [ new docx.TextRun({ text: "Client position inside the car:", italics: true, size: 18, color: "555555" }) ],
+            spacing: { before: 100, after: 60 }
+          }));
+          children.push(new docx.Paragraph({
+            children: [ new docx.ImageRun({ data: imgBytes, type: "png", transformation: { width: 170, height: 263 } }) ]
+          }));
+        }
+      }
     }
   });
-  html += `</div>`;
-  return html;
+
+  return children;
 }
 
-/* Plain-text version for the email body (in case the attachment doesn't
-   render, or as a fallback for text-only clients). */
-function buildSummaryText(order, groups){
-  let lines = [`Procon USA Law — MVA Intake Summary`, `Generated ${new Date().toLocaleString()}`, ""];
-  order.forEach(sec=>{
-    const rows = groups[sec].filter(f=>state.answers[f.id]!==undefined);
-    if(!rows.length) return;
-    lines.push(`-- ${sec} --`);
-    rows.forEach(f=>{
-      lines.push(`${currentLabel(f)}: ${fmtVal(state.answers[f.id])}`);
-    });
-    lines.push("");
+function buildDocxBlob(order, groups){
+  const docx = window.docx;
+  const doc = new docx.Document({
+    sections: [{ properties: {}, children: buildDocxChildren(order, groups) }]
   });
-  return lines.join("\n");
+  return docx.Packer.toBlob(doc);
 }
 
-const PDF_OPT = {
-  margin: 10,
-  filename: 'procon-usa-mva-intake.pdf',
-  image: { type: 'jpeg', quality: 0.98 },
-  /* scrollX/scrollY:0 pins html2canvas's capture window to the top-left of
-     the page regardless of where the user has scrolled — without this it
-     can miscalculate the capture offset and clip or drop content
-     (confirmed by direct testing: right-aligned answer values were being
-     rendered completely outside the captured region). */
-  html2canvas: { scale: 2, scrollX: 0, scrollY: 0, useCORS: true },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-};
-
-/* Builds the wrapper + printArea pair used for html2canvas export.
-   IMPORTANT #1: the element passed to html2canvas (printDiv) must stay in
-   normal static-flow positioning — html2canvas renders a zero-height
-   canvas for elements that are themselves position:absolute/fixed. The
-   WRAPPER (not printDiv) carries the positioning instead.
-   IMPORTANT #2: the wrapper covers the visible viewport (see .print-wrapper
-   in style.css) rather than being pushed far off-screen — a large negative
-   offset was confirmed to make html2canvas miscalculate its capture
-   region and silently clip/drop the answer column. The wrapper is only
-   in the DOM for the brief moment it takes to render, then removed. */
-function buildPrintNodes(order, groups){
-  const wrapper = document.createElement("div");
-  wrapper.className = "print-wrapper";
-  const printDiv = document.createElement("div");
-  printDiv.id = "printArea";
-  printDiv.innerHTML = buildSummaryHtml(order, groups);
-  wrapper.appendChild(printDiv);
-  document.body.appendChild(wrapper);
-  return {wrapper, printDiv};
-}
-
-function exportPDF(order, groups){
-  const {wrapper, printDiv} = buildPrintNodes(order, groups);
-
-  html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
-    document.body.removeChild(wrapper);
-  }).catch(()=>{
-    window.print();
-    document.body.removeChild(wrapper);
-  });
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
 }
 
 function setStatus(msg, kind){
@@ -821,22 +913,32 @@ function setStatus(msg, kind){
   el.style.color = kind === "error" ? "#b33" : kind === "ok" ? "#2a7a2a" : "";
 }
 
+function exportDocx(order, groups){
+  const btn = document.getElementById("docxBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "Preparing…"; }
+  buildDocxBlob(order, groups).then(blob=>{
+    downloadBlob(blob, "procon-usa-mva-intake.docx");
+    if(btn){ btn.disabled = false; btn.textContent = "⬇ Download Word Document"; }
+  }).catch(err=>{
+    if(btn){ btn.disabled = false; btn.textContent = "⬇ Download Word Document"; }
+    setStatus("Couldn't generate the Word document (" + err.message + ").", "error");
+  });
+}
+
 function emailIntake(order, groups){
   const btn = document.getElementById("emailBtn");
   btn.disabled = true;
   btn.textContent = "Preparing…";
-  setStatus("Downloading PDF…");
+  setStatus("Generating Word document…");
 
-  const {wrapper, printDiv} = buildPrintNodes(order, groups);
-
-  html2pdf().set(PDF_OPT).from(printDiv).save().then(()=>{
-    document.body.removeChild(wrapper);
+  buildDocxBlob(order, groups).then(blob=>{
+    downloadBlob(blob, "procon-usa-mva-intake.docx");
 
     const clientNames = state.clients.map(c=>c.name).filter(Boolean).join(", ") || "Unnamed";
     const subject = `New MVA Intake — ${clientNames}`;
     const body =
       `MVA intake completed for: ${clientNames}\n\n` +
-      `A PDF summary (procon-usa-mva-intake.pdf) was just downloaded to this computer — ` +
+      `A Word document summary (procon-usa-mva-intake.docx) was just downloaded to this computer — ` +
       `please attach it to this email before sending.\n\n` +
       `Sent from the Procon USA Law MVA Intake tool.`;
     const mailtoUrl = `mailto:${INTAKE_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -853,12 +955,11 @@ function emailIntake(order, groups){
 
     btn.disabled = false;
     btn.textContent = "✉ Email to " + INTAKE_EMAIL;
-    setStatus("PDF downloaded and email draft opened — attach the PDF and hit Send.", "ok");
+    setStatus("Word document downloaded and email draft opened — attach it and hit Send.", "ok");
   }).catch(err=>{
     btn.disabled = false;
     btn.textContent = "✉ Email to " + INTAKE_EMAIL;
-    setStatus("Couldn't generate the PDF (" + err.message + "). Try Download PDF instead.", "error");
-    if(document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    setStatus("Couldn't generate the Word document (" + err.message + "). Try Download Word Document instead.", "error");
   });
 }
 
