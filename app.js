@@ -407,12 +407,13 @@ const vehicleInfoFlow = [
   q("driverIsEmployee","Vehicle Information","Is the driver an employee","single",{
     options:["Yes","No"], condition: isVehicleCommercial
   }),
-  q("contactedInsuranceCompany","Vehicle Information","Was contact made with Insurance company","single",{
-    options:["Yes","No"], condition: isVehicleCommercial
+  /* Asked for every vehicle, whichever insurance branch was taken — they
+     follow "Is the driver included on the insurance" on the Private side
+     and "Is the driver an employee" on the Commercial side. */
+  q("contactedInsuranceCompany","Vehicle Information","Was contact made with Insurance Company?","single",{
+    options:["Yes","No","Both"]
   }),
-  q("whatWasSaid","Vehicle Information","What was said","text",{
-    condition: isVehicleCommercial
-  })
+  q("whatWasSaid","Vehicle Information","What was said?","text",{})
 ];
 
 /* ---------------------------------------------------------
