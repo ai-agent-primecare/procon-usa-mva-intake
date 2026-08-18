@@ -198,7 +198,9 @@ label.field-label{display:block;font-weight:600;font-size:13px;color:#333;margin
 }
 .review-item{display:flex;justify-content:flex-start;align-items:baseline;gap:8px;padding:6px 0;font-size:14px;border-bottom:1px dashed var(--gray-light);}
 .review-item .rlabel{color:var(--gray);flex-shrink:0;}
-.review-item .rval{font-weight:600;text-align:left;color:#111;}
+.review-item .rval{font-weight:700;text-align:left;color:#111;}
+/* rule between one MVA and the next inside the vehicles section */
+.mva-divider{border-top:2px solid var(--gray);margin:14px 0 10px;}
 .export-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;}
 
 .welcome-card{text-align:center;}
