@@ -199,7 +199,14 @@ function computeClients(s){
   return [];
 }
 function clientCount(s){ return computeClients(s).length; }
+
+/* The name shown in this client's section headers ("Client Information —
+   Jessica Schilling"). The client's own "Full name" answer wins once it has
+   been filled in, since that is the definitive spelling on file; until then
+   it falls back to the name typed in Occupants, and finally to "Client N". */
 function clientName(s, n){
+  const full = s.answers["c" + n + "_fullName"];
+  if(full && String(full).trim()) return String(full).trim();
   const c = computeClients(s)[n-1];
   return (c && c.name && String(c.name).trim()) ? String(c.name).trim() : ("Client " + n);
 }
@@ -297,8 +304,8 @@ const bicycleFlow = [
 /* ---------------------------------------------------------
    CLIENT INFORMATION + DOCUMENTS — both repeat once per client named in
    the Occupants section. The client's name is carried into the section
-   header ("Client Information — Maria Souza") so whoever is filling the
-   form always knows which client the current questions belong to, and
+   header ("Client Information — Jessica Schilling") so whoever is filling
+   the form always knows which client the current questions belong to, and
    the exported document keeps each client's answers in their own block.
 --------------------------------------------------------- */
 /* One combined list: client 1's Client Information, then client 1's
