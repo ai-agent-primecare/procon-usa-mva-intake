@@ -112,20 +112,9 @@ for(let n = 1; n <= MAX_CLIENTS; n++){
 }
 
 /* ---------------------------------------------------------
-   CONTACT (opens the Full intake, right after Kind of Intake)
---------------------------------------------------------- */
-const contactFlow = [
-  q("contact","Client Information","Contact","single",{
-    options:["Altman Nussbaum Shunnarah","Procon"]
-  }),
-  q("contactBestTime","Client Information","When is the best time to contact?","text",{
-    condition: s => s.answers.contact === "Altman Nussbaum Shunnarah"
-  })
-];
-
-/* ---------------------------------------------------------
-   KIND OF ACCIDENT (determines which accident-specific section
-   is shown later)
+   KIND OF ACCIDENT — opens the Full intake, right after Kind of Intake.
+   (The old "Contact" question and its "When is the best time to
+   contact?" follow-up were removed at Procon's request.)
 --------------------------------------------------------- */
 const kindOfAccidentFlow = [
   q("kindOfAccident","Kind of Accident","Kind of Accident","single",{
@@ -497,18 +486,16 @@ function buildFlow(){
 
   /* Full section order (as specified by Procon):
        1. Kind of Intake
-       2. Contact + best time to contact
-       3. Kind of Accident
-       4. Occupants
-       5. Accident details for whichever kind was chosen
+       2. Kind of Accident
+       3. Occupants
+       4. Accident details for whichever kind was chosen
           (Auto Accident Info / Motorcycle / Pedestrian / Bicycle)
-       6. Per client: Client Information, then the Documents they brought
-       7. Vehicle Information
-       8. Vehicles involved in accident (repeated per car involved)
-       9. Special notes                                              */
+       5. Per client: Client Information, then the Documents they brought
+       6. Vehicle Information
+       7. Vehicles involved in accident (repeated per car involved)
+       8. Special notes                                              */
   return [
     ...kindOfIntakeFlow,
-    ...contactFlow,
     ...kindOfAccidentFlow,
     ...occupantsFlow,
     ...accidentInfoFlow,
@@ -784,12 +771,7 @@ function goBack(){ if(state.index>0){ state.index--; render(); } }
    REVIEW / EXPORT
 --------------------------------------------------------- */
 /* Splits the flow into consecutive RUNS of questions that share a section,
-   preserving the exact order the questions were asked in.
-
-   Grouping purely by section name would be wrong here: "Contact" and "When
-   is the best time to contact?" belong to the Client Information section but
-   are asked first — a name-based grouping would yank the whole Client
-   Information block up to the top of the document. Runs also keep each
+   preserving the exact order the questions were asked in. Runs keep each
    repeated client's answers in their own block. */
 function groupIntoBlocks(flow){
   const blocks = [];
