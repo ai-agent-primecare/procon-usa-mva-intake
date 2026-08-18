@@ -20,6 +20,9 @@ const state = {
    Nothing leaves the browser except through the user's own email account. */
 const INTAKE_EMAIL = "ai-agent@rockwood-enterprise.com";
 
+const MAX_CLIENTS  = 8;   // matches the highest "how many people" option
+const MAX_VEHICLES = 8;   // matches the highest "cars involved" option
+
 /* ---------------------------------------------------------
    HELPERS to build question objects
 --------------------------------------------------------- */
@@ -27,8 +30,89 @@ function q(id, section, label, type, opts){
   return Object.assign({id, section, label, type}, opts||{});
 }
 
+/* A question's section can be dynamic (e.g. "Client Information — Maria
+   Souza"), so everything that needs a section name goes through here
+   rather than reading f.section directly. */
+function sectionOf(f){
+  return f.sectionFn ? f.sectionFn(state) : f.section;
+}
+
+/* Converts the ISO value a native <input type="date"> produces
+   (YYYY-MM-DD) into the MM-DD-YYYY format Procon asked for. */
+function isoToMDY(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||"").trim());
+  return m ? (m[2] + "-" + m[3] + "-" + m[1]) : iso;
+}
+
+/* Formats raw digits typed into a plain date field as MM-DD-YYYY,
+   stripping anything that isn't a digit and inserting dashes as you type. */
+function formatMDY(raw){
+  const digits = String(raw||"").replace(/\D/g,"").slice(0,8);
+  let out = digits.slice(0,2);
+  if(digits.length > 2) out += "-" + digits.slice(2,4);
+  if(digits.length > 4) out += "-" + digits.slice(4,8);
+  return out;
+}
+
 /* ---------------------------------------------------------
-   CONTACT (the very first questions asked, before anything else)
+   KIND OF INTAKE — the very first question. "Full" runs the complete
+   questionnaire; "Basic" runs a short 14-question version.
+--------------------------------------------------------- */
+const kindOfIntakeFlow = [
+  q("kindOfIntake","Kind of Intake","Kind of Intake","single",{
+    options:["Full","Basic"], required:true
+  })
+];
+function isFullIntake(s){ return s.answers.kindOfIntake === "Full"; }
+function isBasicIntake(s){ return s.answers.kindOfIntake === "Basic"; }
+
+/* ---------------------------------------------------------
+   BASIC INTAKE — only the short list of questions, repeated once per
+   client. A single "How many clients?" question drives the repetition.
+--------------------------------------------------------- */
+function basicClientCount(s){ return parseInt(s.answers.basicNumClients,10) || 0; }
+function basicClientName(s, n){
+  const nm = s.answers["b" + n + "_clientName"];
+  return (nm && String(nm).trim()) ? String(nm).trim() : ("Client " + n);
+}
+
+const basicFlow = [
+  q("basicNumClients","Basic Intake","How many clients?","single",{
+    options:["1","2","3","4","5","6","7","8"], required:true
+  })
+];
+for(let n = 1; n <= MAX_CLIENTS; n++){
+  const id    = k => "b" + n + "_" + k;
+  const shown = s => basicClientCount(s) >= n;
+  const sec   = s => "Basic Intake — " + basicClientName(s, n);
+  const base  = { sectionFn: sec, condition: shown };
+  const with_ = extra => Object.assign({}, base, extra);
+
+  basicFlow.push(
+    q(id("clientName"),      "Basic Intake","Client name","text",       with_({})),
+    q(id("phone"),           "Basic Intake","Phone Number","text",      with_({})),
+    q(id("bestTime"),        "Basic Intake","Best time to call","text", with_({})),
+    q(id("email"),           "Basic Intake","E-mail","text",            with_({})),
+    q(id("address"),         "Basic Intake","Address","text",           with_({})),
+    q(id("dob"),             "Basic Intake","Date of birth","date",     with_({})),
+    q(id("amb"),             "Basic Intake","Amb","single",             with_({options:["Yes","No"]})),
+    q(id("er"),              "Basic Intake","ER","single",              with_({options:["Yes","No"]})),
+    q(id("erHospital"),      "Basic Intake","What hospital?","text",    with_({
+      condition: s => shown(s) && s.answers[id("er")] === "Yes"
+    })),
+    q(id("clinic"),          "Basic Intake","Clinic","text",            with_({})),
+    q(id("accidentDate"),    "Basic Intake","Date of Accident","datepicker", with_({})),
+    q(id("accidentLocation"),"Basic Intake","Location of Accident","text",   with_({})),
+    q(id("briefDescription"),"Basic Intake","Brief description","textarea",  with_({
+      placeholder:"Briefly describe what happened..."
+    })),
+    q(id("contactedInsurance"),"Basic Intake","Contacted the Insurance Company","single", with_({options:["Yes","No"]})),
+    q(id("claim"),           "Basic Intake","Claim","text",             with_({}))
+  );
+}
+
+/* ---------------------------------------------------------
+   CONTACT (opens the Full intake, right after Kind of Intake)
 --------------------------------------------------------- */
 const contactFlow = [
   q("contact","Client Information","Contact","single",{
@@ -106,12 +190,37 @@ const occupantsFlow = [
   })
 ];
 
+/* Works out the list of clients from the Occupants answers. Everything
+   that repeats per client (Client Information, Documents) keys off this. */
+function computeClients(s){
+  const n = parseInt(s.answers.numPeople,10);
+  if(!n) return [];
+  if(n === 1){
+    if(!s.answers.singleName) return [];
+    return [{name:s.answers.singleName, role:s.answers.singleRole||""}];
+  }
+  if(s.answers.allClients === "Yes"){
+    const names = s.answers.clientNamesAll || [];
+    return names.filter(Boolean).map(nm=>({name:nm, role:""}));
+  }
+  if(s.answers.allClients === "No"){
+    const names = s.answers.clientNamesPartial || [];
+    return names.filter(Boolean).map(nm=>({name:nm, role:""}));
+  }
+  return [];
+}
+function clientCount(s){ return computeClients(s).length; }
+function clientName(s, n){
+  const c = computeClients(s)[n-1];
+  return (c && c.name && String(c.name).trim()) ? String(c.name).trim() : ("Client " + n);
+}
+
 /* ---------------------------------------------------------
    AUTO ACCIDENT INFO (asked right after Occupants, before Client
    Information — only for "Car" / "Truck" / "Taxi/Rideshare" kinds)
 --------------------------------------------------------- */
 const accidentInfoFlow = [
-  q("accidentDate","Auto Accident Info","Day of accident (DOL)","date",{
+  q("accidentDate","Auto Accident Info","Day of accident (DOL)","datepicker",{
     condition: isAutoKind
   }),
   q("accidentTime","Auto Accident Info","Time of accident","time12",{placeholder:"e.g. 2:30",
@@ -177,29 +286,18 @@ const accidentInfoFlow = [
   })
 ];
 
-/* ---------------------------------------------------------
-   MOTORCYCLE ACCIDENT (only for "Motorcycle/E-Scooter/E-Bike")
---------------------------------------------------------- */
 const motorcycleFlow = [
   q("motorcycleFacts","Motorcycle Accident","Facts of the Motorcycle/E-Scooter/E-Bike accident","textarea",{
     placeholder:"Explain what happened in the accident...",
     condition: isMotorcycleKind
   })
 ];
-
-/* ---------------------------------------------------------
-   PEDESTRIAN ACCIDENT (only for "Pedestrian")
---------------------------------------------------------- */
 const pedestrianFlow = [
   q("pedestrianFacts","Pedestrian Accident","Facts of the Pedestrian accident","textarea",{
     placeholder:"Explain what happened in the accident...",
     condition: isPedestrianKind
   })
 ];
-
-/* ---------------------------------------------------------
-   BICYCLE RIDER ACCIDENT (only for "Bicycle Rider")
---------------------------------------------------------- */
 const bicycleFlow = [
   q("bicycleFacts","Bicycle Rider Accident","Facts of the Bicycle Rider accident","textarea",{
     placeholder:"Explain what happened in the accident...",
@@ -208,85 +306,96 @@ const bicycleFlow = [
 ];
 
 /* ---------------------------------------------------------
-   CLIENT INFORMATION (shown for every kind of accident, right after
-   the accident-details section). "Contact" and "When is the best
-   time to contact?" live in contactFlow instead — they open the intake.
+   CLIENT INFORMATION + DOCUMENTS — both repeat once per client named in
+   the Occupants section. The client's name is carried into the section
+   header ("Client Information — Maria Souza") so whoever is filling the
+   form always knows which client the current questions belong to, and
+   the exported document keeps each client's answers in their own block.
 --------------------------------------------------------- */
-const clientInfoFlow = [
-  q("language","Client Information","Language","single",{
-    options:["Portuguese","English","Spanish","English/Spanish","English/Portuguese","Other"]
-  }),
-  q("languageOther","Client Information","Please specify the language","text",{
-    condition: s => s.answers.language === "Other"
-  }),
-  q("needTranslator","Client Information","Need translator","single",{
-    options:["Yes","No"]
-  }),
-  q("clientIs","Client Information","Client is the:","single",{
-    options:["Driver","Passenger"]
-  }),
-  q("pipApplication","Client Information","PIP Application","single",{
-    options:["Yes","No"]
-  }),
-  q("clientPosition","Client Information","Client position inside the car","carseat",{
-    options:["Driver","Front Passenger","Rear Driver Side","Rear Middle","Rear Passenger Side"]
-  }),
-  q("lostWorkDay","Client Information","Lost day of work","single",{
-    options:["Yes","No"]
-  }),
-  q("employment","Client Information","Employment","text",{}),
-  q("fullName","Client Information","Full name","text",{}),
-  q("address","Client Information","Address","text",{}),
-  q("phone","Client Information","Phone","text",{}),
-  q("dob","Client Information","Date of birth","date",{}),
-  q("ssn","Client Information","SSN","text",{}),
-  q("email","Client Information","E-mail","text",{}),
-  q("dlNumber","Client Information","Driver's License Number","text",{}),
-  q("dlState","Client Information","Driver's License State","text",{}),
-  q("priorAccidents","Client Information","Any previous accident with a vehicle","single",{
-    options:["None in less than 5 years","Yes, more than 5 years","Yes, less than 5 years"]
-  }),
-  q("healthInsuranceType","Client Information","Type of Health Insurance","single",{
-    options:["Private","Masshealth","No Insurance"]
-  }),
-  q("healthInsuranceName","Client Information","Health Insurance Name","text",{
-    condition: s => s.answers.healthInsuranceType === "Private"
-  }),
-  q("injuries","Client Information","Injuries","textarea",{
-    placeholder:"Describe the injuries..."
-  }),
-  q("ambulance","Client Information","Ambulance","single",{
-    options:["Yes","No"]
-  }),
-  q("er","Client Information","ER","single",{
-    options:["Yes","No"]
-  }),
-  q("erHospital","Client Information","Which hospital?","text",{
-    condition: s => s.answers.er === "Yes"
-  }),
-  q("clinic","Client Information","Clinic","text",{})
-];
+/* One combined list: client 1's Client Information, then client 1's
+   Documents, then client 2's, and so on — so everything about a given
+   client stays together both on screen and in the exported document. */
+const perClientFlow = [];
+
+for(let n = 1; n <= MAX_CLIENTS; n++){
+  const clientInfoFlow = [];
+  const documentsFlow  = [];
+  const id    = k => "c" + n + "_" + k;
+  const shown = s => clientCount(s) >= n;
+  const infoSec = s => "Client Information — " + clientName(s, n);
+  const docsSec = s => "Documents or information brought by our client — " + clientName(s, n);
+
+  const info = extra => Object.assign({ sectionFn: infoSec, condition: shown }, extra);
+
+  clientInfoFlow.push(
+    q(id("language"),"Client Information","Language","single", info({
+      options:["Portuguese","English","Spanish","English/Spanish","English/Portuguese","Other"]
+    })),
+    q(id("languageOther"),"Client Information","Please specify the language","text", info({
+      condition: s => shown(s) && s.answers[id("language")] === "Other"
+    })),
+    q(id("needTranslator"),"Client Information","Need translator","single", info({options:["Yes","No"]})),
+    q(id("clientIs"),"Client Information","Client is the:","single", info({options:["Driver","Passenger"]})),
+    q(id("pipApplication"),"Client Information","PIP Application","single", info({options:["Yes","No"]})),
+    q(id("clientPosition"),"Client Information","Client position inside the car","carseat", info({
+      options:["Driver","Front Passenger","Rear Driver Side","Rear Middle","Rear Passenger Side"]
+    })),
+    q(id("lostWorkDay"),"Client Information","Lost day of work","single", info({options:["Yes","No"]})),
+    q(id("employment"),"Client Information","Employment","text", info({})),
+    q(id("fullName"),"Client Information","Full name","text", info({})),
+    q(id("address"),"Client Information","Address","text", info({})),
+    q(id("phone"),"Client Information","Phone","text", info({})),
+    q(id("dob"),"Client Information","Date of birth","date", info({})),
+    q(id("ssn"),"Client Information","SSN","text", info({})),
+    q(id("email"),"Client Information","E-mail","text", info({})),
+    q(id("dlNumber"),"Client Information","Driver's License Number","text", info({})),
+    q(id("dlState"),"Client Information","Driver's License State","text", info({})),
+    q(id("priorAccidents"),"Client Information","Any previous accident with a vehicle","single", info({
+      options:["None in less than 5 years","Yes, more than 5 years","Yes, less than 5 years"]
+    })),
+    q(id("healthInsuranceType"),"Client Information","Type of Health Insurance","single", info({
+      options:["Private","Masshealth","No Insurance"]
+    })),
+    q(id("healthInsuranceName"),"Client Information","Health Insurance Name","text", info({
+      condition: s => shown(s) && s.answers[id("healthInsuranceType")] === "Private"
+    })),
+    q(id("injuries"),"Client Information","Injuries","textarea", info({
+      placeholder:"Describe the injuries..."
+    })),
+    q(id("ambulance"),"Client Information","Ambulance","single", info({options:["Yes","No"]})),
+    q(id("er"),"Client Information","ER","single", info({options:["Yes","No"]})),
+    q(id("erHospital"),"Client Information","Which hospital?","text", info({
+      condition: s => shown(s) && s.answers[id("er")] === "Yes"
+    })),
+    q(id("clinic"),"Client Information","Clinic","text", info({}))
+  );
+
+  const DOC_ITEMS = [
+    ["docDriversLicense",       "Valid Driver's License"],
+    ["docDriversLicenseOrigin", "Valid Driver's License from country of origin"],
+    ["docPassport",             "Passport"],
+    ["docPoliceReport",         "Police Report"],
+    ["docPoliceExchangeForm",   "Police Exchange Form"],
+    ["docMedicalBills",         "Medical Bills"],
+    ["docHospitalDischarge",    "Hospital Discharge"],
+    ["docMasshealthCard",       "Masshealth Insurance Card"],
+    ["docPrivateInsuranceCard", "Private Health Insurance Card"],
+    ["docAccidentPhotos",       "Accident Photos"],
+    ["docTowReceipt",           "Tow Receipt"]
+  ];
+  DOC_ITEMS.forEach(function(item){
+    documentsFlow.push(
+      q(id(item[0]), "Documents or information brought by our client", item[1], "single", {
+        options:["Yes","No"], sectionFn: docsSec, condition: shown
+      })
+    );
+  });
+
+  perClientFlow.push(...clientInfoFlow, ...documentsFlow);
+}
 
 /* ---------------------------------------------------------
-   DOCUMENTS OR INFORMATION BROUGHT BY OUR CLIENT (right after
-   Client Information, before Vehicle Information)
---------------------------------------------------------- */
-const documentsFlow = [
-  q("docDriversLicense","Documents or information brought by our client","Valid Driver's License","single",{options:["Yes","No"]}),
-  q("docDriversLicenseOrigin","Documents or information brought by our client","Valid Driver's License from country of origin","single",{options:["Yes","No"]}),
-  q("docPassport","Documents or information brought by our client","Passport","single",{options:["Yes","No"]}),
-  q("docPoliceReport","Documents or information brought by our client","Police Report","single",{options:["Yes","No"]}),
-  q("docPoliceExchangeForm","Documents or information brought by our client","Police Exchange Form","single",{options:["Yes","No"]}),
-  q("docMedicalBills","Documents or information brought by our client","Medical Bills","single",{options:["Yes","No"]}),
-  q("docHospitalDischarge","Documents or information brought by our client","Hospital Discharge","single",{options:["Yes","No"]}),
-  q("docMasshealthCard","Documents or information brought by our client","Masshealth Insurance Card","single",{options:["Yes","No"]}),
-  q("docPrivateInsuranceCard","Documents or information brought by our client","Private Health Insurance Card","single",{options:["Yes","No"]}),
-  q("docAccidentPhotos","Documents or information brought by our client","Accident Photos","single",{options:["Yes","No"]}),
-  q("docTowReceipt","Documents or information brought by our client","Tow Receipt","single",{options:["Yes","No"]})
-];
-
-/* ---------------------------------------------------------
-   VEHICLE INFORMATION (right after Documents)
+   VEHICLE INFORMATION (the client's own vehicle)
 --------------------------------------------------------- */
 function isVehiclePrivate(s){ return s.answers.vehicleInsuranceKind === "Private"; }
 function isVehicleCommercial(s){ return s.answers.vehicleInsuranceKind === "Commercial"; }
@@ -318,27 +427,17 @@ const vehicleInfoFlow = [
 ];
 
 /* ---------------------------------------------------------
-   VEHICLES INVOLVED IN ACCIDENT (right after Vehicle Information)
-
-   The same block of questions repeats once per vehicle, driven by the
-   answer to "How many cars were involved in the accident?" — 3 cars means
-   the block is asked 3 times. Questions for vehicles beyond that count are
-   filtered out by their condition, so nothing extra is asked or exported.
-
-   That car-count question only exists for the auto kinds (Car / Truck /
-   Taxi-Rideshare), so for Motorcycle / Pedestrian / Bicycle intakes
-   carsInvolved is undefined, every condition below is false, and the whole
-   section drops out of the flow automatically.
+   VEHICLES INVOLVED IN ACCIDENT — one block per car involved, labelled
+   "MVA 1", "MVA 2", ... The block repeats according to the answer to
+   "How many cars were involved in the accident?". That question only
+   exists for the auto kinds, so this section drops out entirely for
+   Motorcycle / Pedestrian / Bicycle intakes.
 --------------------------------------------------------- */
-const MAX_VEHICLES = 8;   // matches the highest "cars involved" option
 const VEHICLE_FIELDS = [
   ["registration",  "Registration",          "text"],
   ["regState",      "State of registration", "text"],
   ["owner",         "Owner",                 "text"],
   ["address",       "Address",               "text"],
-  ["city",          "City",                  "text"],
-  ["state",         "State",                 "text"],
-  ["zip",           "Zip code",              "text"],
   ["make",          "Make",                  "text"],
   ["model",         "Model",                 "text"],
   ["year",          "Year",                  "text"],
@@ -353,13 +452,14 @@ for(let n = 1; n <= MAX_VEHICLES; n++){
   VEHICLE_FIELDS.forEach(function(def){
     const key = def[0], label = def[1], type = def[2];
     const opts = {
+      mvaIndex: n,
       condition: s => (parseInt(s.answers.carsInvolved, 10) || 0) >= n
     };
     if(type === "textarea") opts.placeholder = "Describe the damage...";
     vehiclesInvolvedFlow.push(
       q("vehicle" + n + "_" + key,
         "Vehicles involved in accident",
-        "Vehicle " + n + " — " + label,
+        "MVA " + n + " — " + label,
         type,
         opts)
     );
@@ -367,39 +467,47 @@ for(let n = 1; n <= MAX_VEHICLES; n++){
 }
 
 /* ---------------------------------------------------------
+   SPECIAL NOTES — the final question of every intake, Full or Basic.
+--------------------------------------------------------- */
+const specialNotesFlow = [
+  q("specialNotes","Special notes","Special notes","textarea",{
+    placeholder:"Anything else worth recording about this intake..."
+  })
+];
+
+/* ---------------------------------------------------------
    BUILD FULL FLOW (recomputed live based on state)
 --------------------------------------------------------- */
-function computeClients(s){
-  const n = parseInt(s.answers.numPeople,10);
-  if(!n) return [];
-  if(n === 1){
-    if(!s.answers.singleName) return [];
-    return [{name:s.answers.singleName, role:s.answers.singleRole||""}];
-  }
-  if(s.answers.allClients === "Yes"){
-    const names = s.answers.clientNamesAll || [];
-    return names.filter(Boolean).map(nm=>({name:nm, role:""}));
-  }
-  if(s.answers.allClients === "No"){
-    const names = s.answers.clientNamesPartial || [];
-    return names.filter(Boolean).map(nm=>({name:nm, role:""}));
-  }
-  return [];
-}
-
 function buildFlow(){
   state.clients = computeClients(state);
-  /* Section order (as specified by Procon):
-       1. Contact + best time to contact  (contactFlow)
-       2. Kind of Accident
-       3. Occupants
-       4. Accident details for whichever kind was chosen
+
+  if(isBasicIntake(state)){
+    /* Basic: the short questionnaire only, repeated per client. */
+    return [
+      ...kindOfIntakeFlow,
+      ...basicFlow,
+      ...specialNotesFlow
+    ];
+  }
+
+  if(!isFullIntake(state)){
+    /* Nothing chosen yet — only the Kind of Intake question exists. */
+    return [...kindOfIntakeFlow];
+  }
+
+  /* Full section order (as specified by Procon):
+       1. Kind of Intake
+       2. Contact + best time to contact
+       3. Kind of Accident
+       4. Occupants
+       5. Accident details for whichever kind was chosen
           (Auto Accident Info / Motorcycle / Pedestrian / Bicycle)
-       5. Client Information (language → clinic)
-       6. Documents or information brought by our client
+       6. Per client: Client Information, then the Documents they brought
        7. Vehicle Information
-       8. Vehicles involved in accident (repeated per car involved)   */
+       8. Vehicles involved in accident (repeated per car involved)
+       9. Special notes                                              */
   return [
+    ...kindOfIntakeFlow,
     ...contactFlow,
     ...kindOfAccidentFlow,
     ...occupantsFlow,
@@ -407,10 +515,10 @@ function buildFlow(){
     ...motorcycleFlow,
     ...pedestrianFlow,
     ...bicycleFlow,
-    ...clientInfoFlow,
-    ...documentsFlow,
+    ...perClientFlow,
     ...vehicleInfoFlow,
-    ...vehiclesInvolvedFlow
+    ...vehiclesInvolvedFlow,
+    ...specialNotesFlow
   ];
 }
 
@@ -429,16 +537,6 @@ function currentLabel(f){
   if(f.labelFn) return f.labelFn(state);
   if(f.titlePrefix) return `${f.titlePrefix()}: ${f.label}`;
   return f.label;
-}
-
-/* Formats raw digits typed into a date field as MM-DD-YYYY, stripping
-   anything that isn't a digit and inserting dashes as the user types. */
-function formatMDY(raw){
-  const digits = String(raw||"").replace(/\D/g,"").slice(0,8);
-  let out = digits.slice(0,2);
-  if(digits.length > 2) out += "-" + digits.slice(2,4);
-  if(digits.length > 4) out += "-" + digits.slice(4,8);
-  return out;
 }
 
 function renderWelcome(){
@@ -466,7 +564,7 @@ function render(){
   }
   const f = flow[state.index];
   progressBar.style.width = Math.round((state.index/(flow.length+1))*100) + "%";
-  sectionLabel.textContent = f.section;
+  sectionLabel.textContent = sectionOf(f);
 
   app.innerHTML = "";
   const card = document.createElement("div");
@@ -517,6 +615,19 @@ function render(){
       wrap.appendChild(row);
     });
     body.appendChild(wrap);
+    body.appendChild(navButtons(f, true));
+  }
+  else if(f.type === "datepicker"){
+    /* Native date input — gives the browser's own calendar picker.
+       The value it holds is ISO (YYYY-MM-DD); it is converted to
+       MM-DD-YYYY for the review screen and the Word document. */
+    const input = document.createElement("input");
+    input.type = "date";
+    input.value = currentVal || "";
+    input.oninput = ()=>{ state.answers[f.id] = input.value; };
+    input.onkeydown = (e)=>{ if(e.key==="Enter"){ goNext(); } };
+    body.appendChild(input);
+    setTimeout(()=>input.focus(), 30);
     body.appendChild(navButtons(f, true));
   }
   else if(f.type === "text" || f.type === "date"){
@@ -677,17 +788,16 @@ function goBack(){ if(state.index>0){ state.index--; render(); } }
 
    Grouping purely by section name would be wrong here: "Contact" and "When
    is the best time to contact?" belong to the Client Information section but
-   are asked first, before Kind of Accident — a name-based grouping would
-   yank the whole Client Information block (Language → Clinic included) up to
-   the top of the document. Using runs instead means the exported Word file
-   and the on-screen review read in the same order the questions were
-   actually answered. */
+   are asked first — a name-based grouping would yank the whole Client
+   Information block up to the top of the document. Runs also keep each
+   repeated client's answers in their own block. */
 function groupIntoBlocks(flow){
   const blocks = [];
   flow.forEach(f=>{
+    const sec = sectionOf(f);
     const last = blocks[blocks.length-1];
-    if(last && last.section === f.section) last.fields.push(f);
-    else blocks.push({section: f.section, fields: [f]});
+    if(last && last.section === sec) last.fields.push(f);
+    else blocks.push({section: sec, fields: [f]});
   });
   return blocks;
 }
@@ -696,6 +806,13 @@ function fmtVal(v){
   if(Array.isArray(v)) return v.length ? v.join(", ") : "—";
   if(!v) return "—";
   return v;
+}
+/* Answer as it should read in the review and the Word document — date
+   pickers hold ISO internally but must print as MM-DD-YYYY. */
+function fmtField(f){
+  const v = state.answers[f.id];
+  if(f.type === "datepicker" && v) return isoToMDY(v);
+  return fmtVal(v);
 }
 
 function renderReview(){
@@ -728,11 +845,21 @@ function renderReview(){
     const h3 = document.createElement("h3");
     h3.textContent = block.section;
     secDiv.appendChild(h3);
+
+    let lastMva = null;
     rows.forEach(f=>{
+      /* A rule between each MVA inside the vehicles section. */
+      if(f.mvaIndex && lastMva !== null && f.mvaIndex !== lastMva){
+        const hr = document.createElement("div");
+        hr.className = "mva-divider";
+        secDiv.appendChild(hr);
+      }
+      if(f.mvaIndex) lastMva = f.mvaIndex;
+
       const item = document.createElement("div");
       item.className = "review-item";
       const l = document.createElement("span"); l.className="rlabel"; l.textContent = currentLabel(f) + ":";
-      const v = document.createElement("span"); v.className="rval"; v.textContent = fmtVal(state.answers[f.id]);
+      const v = document.createElement("span"); v.className="rval"; v.textContent = fmtField(f);
       item.appendChild(l); item.appendChild(v);
       secDiv.appendChild(item);
     });
@@ -769,8 +896,7 @@ function renderReview(){
 
 /* ---------------------------------------------------------
    CAR-SEAT DIAGRAM (canvas-drawn image, embedded into the exported
-   Word document) — mirrors the on-screen picker's seat positions and
-   highlight styling using the same renamed seat labels.
+   Word document) — mirrors the on-screen picker's seat positions.
 --------------------------------------------------------- */
 function roundRectPath(ctx,x,y,w,h,r){
   ctx.beginPath();
@@ -859,18 +985,21 @@ function canvasToPngBytes(canvas){
 const CELL_BORDER = { style: "single", size: 2, color: "DDDDDD" };
 const CELL_BORDERS = { top: CELL_BORDER, bottom: CELL_BORDER, left: CELL_BORDER, right: CELL_BORDER };
 
+/* Question text prints in normal weight, the answer in bold. */
+function qaRuns(f){
+  const docx = window.docx;
+  return [
+    new docx.TextRun({ text: currentLabel(f) + ": ", bold: false, size: 20, color: "555555" }),
+    new docx.TextRun({ text: fmtField(f), bold: true, size: 20, color: "111111" })
+  ];
+}
 function qaCell(f){
   const docx = window.docx;
   return new docx.TableCell({
     width: { size: 50, type: docx.WidthType.PERCENTAGE },
     borders: CELL_BORDERS,
     margins: { top:80, bottom:80, left:100, right:100 },
-    children: [ new docx.Paragraph({
-      children: [
-        new docx.TextRun({ text: currentLabel(f) + ": ", bold: true, size: 20, color: "555555" }),
-        new docx.TextRun({ text: fmtVal(state.answers[f.id]), size: 20, color: "111111" })
-      ]
-    }) ]
+    children: [ new docx.Paragraph({ children: qaRuns(f) }) ]
   });
 }
 function emptyCell(){
@@ -881,16 +1010,21 @@ function emptyCell(){
     children: [ new docx.Paragraph({ children: [] }) ]
   });
 }
+/* A full-width rule, used to separate one MVA from the next. */
+function dividerParagraph(){
+  const docx = window.docx;
+  return new docx.Paragraph({
+    children: [],
+    border: { bottom: { style: "single", size: 6, color: "BBBBBB", space: 1 } },
+    spacing: { before: 100, after: 140 }
+  });
+}
 
 /* Builds the ordered list of docx content blocks (paragraphs/tables/images)
    for the full intake summary. The document follows the EXACT order the
    questions were asked in (see groupIntoBlocks) so the Word file reads the
-   same way the intake was conducted. Every answer is kept directly beside
-   its question (bold label immediately followed by the value on the same
-   line) rather than pushed off to a separate column — per Procon's
-   request that answers stay close to the question instead of drifting to
-   the right side of the page. The Documents section renders as a
-   two-column table since every question there is a short Yes/No answer. */
+   same way the intake was conducted, and every answer sits directly beside
+   its question rather than drifting to the right side of the page. */
 function buildDocxChildren(blocks){
   const docx = window.docx;
   const children = [];
@@ -916,7 +1050,7 @@ function buildDocxChildren(blocks){
       spacing: { before: 240, after: 120 }
     }));
 
-    if(sec === "Documents or information brought by our client"){
+    if(sec.indexOf("Documents or information brought by our client") === 0){
       const tableRows = [];
       for(let i=0;i<rows.length;i+=2){
         const left = rows[i];
@@ -930,28 +1064,31 @@ function buildDocxChildren(blocks){
         rows: tableRows
       }));
     } else {
+      let lastMva = null;
       rows.forEach(f=>{
+        /* Separate each vehicle in the MVA section with a rule. */
+        if(f.mvaIndex && lastMva !== null && f.mvaIndex !== lastMva){
+          children.push(dividerParagraph());
+        }
+        if(f.mvaIndex) lastMva = f.mvaIndex;
+
         children.push(new docx.Paragraph({
-          children: [
-            new docx.TextRun({ text: currentLabel(f) + ": ", bold: true, size: 20, color: "555555" }),
-            new docx.TextRun({ text: fmtVal(state.answers[f.id]), size: 20, color: "111111" })
-          ],
+          children: qaRuns(f),
           spacing: { after: 60 }
         }));
       });
 
-      if(sec === "Client Information" && state.answers.clientPosition){
-        const hasClientPositionRow = rows.some(fld=>fld.id==="clientPosition");
-        if(hasClientPositionRow){
-          const imgBytes = canvasToPngBytes(buildCarSeatDiagramCanvas(state.answers.clientPosition));
-          children.push(new docx.Paragraph({
-            children: [ new docx.TextRun({ text: "Client position inside the car:", italics: true, size: 18, color: "555555" }) ],
-            spacing: { before: 100, after: 60 }
-          }));
-          children.push(new docx.Paragraph({
-            children: [ new docx.ImageRun({ data: imgBytes, type: "png", transformation: { width: 170, height: 263 } }) ]
-          }));
-        }
+      /* The car-seat drawing goes with whichever client's block holds it. */
+      const seatField = rows.filter(fld => fld.type === "carseat" && state.answers[fld.id])[0];
+      if(seatField){
+        const imgBytes = canvasToPngBytes(buildCarSeatDiagramCanvas(state.answers[seatField.id]));
+        children.push(new docx.Paragraph({
+          children: [ new docx.TextRun({ text: "Client position inside the car:", italics: true, size: 18, color: "555555" }) ],
+          spacing: { before: 100, after: 60 }
+        }));
+        children.push(new docx.Paragraph({
+          children: [ new docx.ImageRun({ data: imgBytes, type: "png", transformation: { width: 170, height: 263 } }) ]
+        }));
       }
     }
   });
@@ -998,6 +1135,19 @@ function exportDocx(blocks){
   });
 }
 
+/* Names used in the email subject/body — the Occupants list for a Full
+   intake, or the Basic intake's own client-name answers. */
+function intakeClientNames(){
+  const full = state.clients.map(c=>c.name).filter(Boolean);
+  if(full.length) return full.join(", ");
+  const basic = [];
+  for(let n=1;n<=MAX_CLIENTS;n++){
+    const nm = state.answers["b"+n+"_clientName"];
+    if(nm && String(nm).trim()) basic.push(String(nm).trim());
+  }
+  return basic.length ? basic.join(", ") : "Unnamed";
+}
+
 function emailIntake(blocks){
   const btn = document.getElementById("emailBtn");
   btn.disabled = true;
@@ -1007,7 +1157,7 @@ function emailIntake(blocks){
   buildDocxBlob(blocks).then(blob=>{
     downloadBlob(blob, "procon-usa-mva-intake.docx");
 
-    const clientNames = state.clients.map(c=>c.name).filter(Boolean).join(", ") || "Unnamed";
+    const clientNames = intakeClientNames();
     const subject = `New MVA Intake — ${clientNames}`;
     const body =
       `MVA intake completed for: ${clientNames}\n\n` +
