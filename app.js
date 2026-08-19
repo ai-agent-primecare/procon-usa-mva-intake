@@ -408,6 +408,9 @@ const vehicleInfoFlow = [
   q("ownerSameHouse","Vehicle Information","Does the owner of vehicle live in the same house as driver","single",{options:["Yes","No"]}),
   q("vehicleCity","Vehicle Information","What city does the vehicle sleep in?","text",{}),
   q("vehicleInsuranceKind","Vehicle Information","What kind of insurance does the vehicle have","single",{options:["Private","Commercial"]}),
+  q("vehicleCoverage","Vehicle Information","What kind of coverage?","single",{
+    options:["Basic","Total with rental","Total without rental","Client does not know"]
+  }),
   q("driverIncludedInsurance","Vehicle Information","Is the driver included on the insurance","single",{
     options:["Yes","No"], condition: isVehiclePrivate
   }),
