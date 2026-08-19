@@ -332,7 +332,6 @@ for(let n = 1; n <= MAX_CLIENTS; n++){
     })),
     q(id("needTranslator"),"Client Information","Need translator","single", info({options:["Yes","No"]})),
     q(id("clientIs"),"Client Information","Client is the:","single", info({options:["Driver","Passenger"]})),
-    q(id("pipApplication"),"Client Information","PIP Application","single", info({options:["Yes","No"]})),
     q(id("clientPosition"),"Client Information","Client position inside the car","carseat", info({
       options:["Driver","Front Passenger","Rear Driver Side","Rear Middle","Rear Passenger Side"]
     })),
