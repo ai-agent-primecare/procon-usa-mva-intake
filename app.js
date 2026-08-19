@@ -337,12 +337,16 @@ for(let n = 1; n <= MAX_CLIENTS; n++){
       options:["Driver","Front Passenger","Rear Driver Side","Rear Middle","Rear Passenger Side"]
     })),
     q(id("lostWorkDay"),"Client Information","Lost day of work","single", info({options:["Yes","No"]})),
+    q(id("lostWorkDays"),"Client Information","How many days?","text", info({
+      condition: s => shown(s) && s.answers[id("lostWorkDay")] === "Yes"
+    })),
     q(id("employment"),"Client Information","Employment","text", info({})),
     q(id("fullName"),"Client Information","Full name","text", info({})),
     q(id("address"),"Client Information","Address","text", info({})),
     q(id("phone"),"Client Information","Phone","text", info({})),
     q(id("dob"),"Client Information","Date of birth","date", info({})),
     q(id("ssn"),"Client Information","SSN","text", info({})),
+    q(id("medicareEligible"),"Client Information","Medicare eligible?","text", info({})),
     q(id("email"),"Client Information","E-mail","text", info({})),
     q(id("dlNumber"),"Client Information","Driver's License Number","text", info({})),
     q(id("dlState"),"Client Information","Driver's License State","text", info({})),
